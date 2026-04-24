@@ -1,0 +1,52 @@
+{
+  "name": "commands-com",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "Local-first OSS CLI for review cycles and code quality workflows",
+  "keywords": [
+    "ai",
+    "agents",
+    "code-review",
+    "cli",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/Commands-com/commands-com#readme",
+  "bugs": {
+    "url": "https://github.com/Commands-com/commands-com/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Commands-com/commands-com.git"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "commands-com": "./bin/commands-com.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skills",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "maintainability-check": "node scripts/maintainability-check.mjs",
+    "check-js": "tsc -p jsconfig.json --noEmit",
+    "syntax-check": "node scripts/maintainability-check.mjs --syntax-check",
+    "test": "node --test \"test/**/*.test.js\"",
+    "coverage": "node scripts/coverage.mjs",
+    "validate": "npm run syntax-check && npm run maintainability-check && npm run check-js && npm run coverage && npm run smoke",
+    "smoke": "node ./bin/commands-com.js review \"smoke test\" --provider mock --json && node ./bin/commands-com.js quality --provider mock --area maintainability --json && node ./bin/commands-com.js rooms list --json && node ./bin/commands-com.js room security \"smoke room\" --provider mock --participants 1 --json && node ./bin/commands-com.js doctor --json"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,164 @@
+import { cycleReportHeader, worktreeNextSteps } from './cycle-report.js';
+import {
+  normalizedCycleIssueCount,
+  normalizedCycleScore,
+  scoreIsWorseThanTarget,
+} from './cycle-summary.js';
+
+/**
+ * Public assessment reporting facade.
+ *
+ * Review and quality commands import report rendering, issue predicates, and
+ * final-cycle defaults from here. Completion payload builders live in
+ * `assessment-completion.js`. `assessment-prompts.js` owns prompt construction.
+ */
+export const DEFAULT_QUALITY_FINAL_CYCLE = Object.freeze({
+  score: 'A',
+  issueCount: 0,
+  synopsis: 'No quality audit outputs were produced.',
+  outputs: Object.freeze([]),
+});
+
+export const DEFAULT_REVIEW_FINAL_CYCLE = Object.freeze({
+  score: 'A',
+  issueCount: 0,
+  reviewerIssueCount: 0,
+  synopsis: 'No review outputs were produced.',
+  reviewers: Object.freeze([]),
+});
+
+export function selectReviewFinalCycleWithFallback(cycles) {
+  return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, DEFAULT_REVIEW_FINAL_CYCLE);
+}
+
+export function selectQualityFinalCycleWithFallback(cycles) {
+  return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, DEFAULT_QUALITY_FINAL_CYCLE);
+}
+
+export function formatReviewReport(state, { objective, finalCycle } = {}) {
+  const selectedFinalCycle = finalCycle || selectReviewFinalCycleWithFallback(state.cycles);
+  return formatAssessmentReport({
+    title: `Review Cycle: ${objective}`,
+    state,
+    summaryLines: [
+      `Score: ${selectedFinalCycle.score}`,
+      `Issue count: ${selectedFinalCycle.issueCount}`,
+      `Synopsis: ${selectedFinalCycle.synopsis}`,
+      ...fanoutFailuresSummaryLines(selectedFinalCycle),
+    ],
+    renderCycle: (cycle) => formatAssessmentCycle(cycle, {
+      summaryLines: [
+        `Score: ${cycle.score}`,
+        `Issue count: ${cycle.issueCount}`,
+        `Reviewer issue count: ${cycle.reviewerIssueCount}`,
+        `Synopsis: ${cycle.synopsis}`,
+      ],
+      itemSections: (cycle.reviewers || [])
+        .map((reviewer) => `### ${reviewer.provider} / ${reviewer.role}\n\n${reviewer.text}`),
+    }),
+  });
+}
+
+export function formatQualityReport(state, { finalCycle } = {}) {
+  return formatAssessmentReport({
+    title: 'Code Quality Report',
+    state,
+    summaryLines: [
+      `Score: ${finalCycle.score}`,
+      `Issue count: ${finalCycle.issueCount}`,
+      `Synopsis: ${finalCycle.synopsis}`,
+      ...fanoutFailuresSummaryLines(finalCycle),
+    ],
+    renderCycle: (cycle) => formatAssessmentCycle(cycle, {
+      summaryLines: [
+        `Score: ${cycle.score}`,
+        `Issue count: ${cycle.issueCount}`,
+        `Provider issue count: ${cycle.providerIssueCount}`,
+        `Synopsis: ${cycle.synopsis}`,
+      ],
+      itemSections: (cycle.outputs || [])
+        .map((output) => `### ${output.provider} / ${output.area}\n\n${output.text}`),
+    }),
+  });
+}
+
+function fanoutFailuresSummaryLines(finalCycle) {
+  const failures = Array.isArray(finalCycle?.fanoutFailures) ? finalCycle.fanoutFailures : [];
+  if (!failures.length) return [];
+  return [
+    `Fan-out failures: ${failures.length}`,
+    ...failures.map((failure) => (
+      `- cycle ${finalCycle.cycle}: ${failure.provider}/${failure.item} failed: ${failure.error}`
+    )),
+  ];
+}
+
+export function reviewHasFinalIssues(state, finalCycle = selectReviewFinalCycleWithFallback(state.cycles)) {
+  return assessmentCycleHasFinalIssues(state, finalCycle);
+}
+
+export function qualityHasFinalIssues(state, finalCycle = selectQualityFinalCycleWithFallback(state.cycles)) {
+  return assessmentCycleHasFinalIssues(state, finalCycle);
+}
+
+function assessmentCycleHasFinalIssues(state, finalCycle) {
+  return Boolean(
+    normalizedCycleIssueCount(finalCycle) > 0
+      || scoreIsWorseThanTarget(normalizedCycleScore(finalCycle), 'A')
+      || state.hasUnresolvedTestFailure,
+  );
+}
+
+function formatAssessmentReport({
+  title,
+  state,
+  summaryLines = [],
+  renderCycle,
+}) {
+  return [
+    ...cycleReportHeader({
+      title,
+      store: state.store,
+      providerIds: state.options.providerIds,
+      model: state.options.model,
+      primaryProvider: state.options.primaryProvider,
+      context: state.context,
+      workspace: state.workspace,
+      summaryLines,
+      unresolvedTestFailure: state.hasUnresolvedTestFailure,
+    }),
+    ...state.cycles.flatMap(renderCycle),
+    worktreeNextSteps(state.workspace),
+  ].join('\n');
+}
+
+function formatAssessmentCycle(cycle, { summaryLines, itemSections }) {
+  return [
+    `## Cycle ${cycle.cycle}`,
+    '',
+    ...summaryLines,
+    '',
+    cycle.synthesis ? `### Synthesis (${cycle.synthesisProvider})\n\n${cycle.synthesis}` : '',
+    cycle.synthesisError ? `### Synthesis Error (${cycle.synthesisProvider})\n\n${cycle.synthesisError}` : '',
+    ...itemSections,
+    cycle.implementationPlan ? `### Implementation Plan\n\n${cycle.implementationPlan}` : '',
+    cycle.implementation ? `### Implementation\n\n${cycle.implementation}` : '',
+    cycle.test ? `### Test\n\n${formatTestResult(cycle.test)}` : '',
+  ].filter(Boolean);
+}
+
+function formatTestResult(test) {
+  return test.ok ? 'passed' : `failed with exit ${test.exitCode}`;
+}
+
+export function finalCycleWithDefaults(cycle, fallback) {
+  if (!cycle) return fallback;
+  const issueCount = normalizedCycleIssueCount(cycle);
+  return {
+    ...fallback,
+    ...cycle,
+    score: normalizedCycleScore(cycle, { fallbackScore: fallback.score }),
+    issueCount,
+    synopsis: cycle.synopsis || fallback.synopsis,
+  };
+}
