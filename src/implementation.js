@@ -16,7 +16,6 @@ import {
 import {
   applyImplementationPartialMergePolicy,
   integrationPatchForBatch,
-  SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
 } from './implementation-task-merge.js';
 import {
   buildImplementationBatches,
@@ -140,7 +139,6 @@ async function runImplementationBatch({
   }
 
   const mergePolicyResult = await applyImplementationPartialMergePolicy({
-    policy: SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
     taskRunContext,
     successes,
     useTaskWorktrees,

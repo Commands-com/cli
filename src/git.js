@@ -1,4 +1,3 @@
-import { Buffer } from 'node:buffer';
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -6,6 +5,8 @@ import path from 'node:path';
 import { hasLocalStatePathSegment, localWorktreesPath } from './config.js';
 import { slug, timestamp } from './run-id.js';
 import { WORKSPACE_MODES } from './workflow-constants.js';
+
+const PORCELAIN_LINE_RE = /^[ MADRCUT?!][ MADRCUT?!] /;
 
 // Shorter cap than run-store to leave headroom in git ref and filesystem path
 // lengths: branch is `commands-com/<kind>/<label>-<suffix>` plus worktree path.
@@ -149,137 +150,40 @@ export async function getRepoRoot(cwd) {
   return root.ok ? root.stdout.trim() : '';
 }
 
-function splitStatusPathParts(statusPath) {
-  const source = String(statusPath || '');
-  const parts = [];
-  let start = 0;
-  let quoted = false;
-  let escaped = false;
-
-  for (let i = 0; i < source.length; i += 1) {
-    const ch = source[i];
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
-    if (quoted && ch === '\\') {
-      escaped = true;
-      continue;
-    }
-    if (ch === '"') {
-      quoted = !quoted;
-      continue;
-    }
-    if (!quoted && source.startsWith(' -> ', i)) {
-      parts.push(source.slice(start, i));
-      start = i + 4;
-      i += 3;
-    }
-  }
-
-  parts.push(source.slice(start));
-  return parts;
-}
-
-function unquoteGitPath(statusPathPart) {
-  const trimmed = String(statusPathPart || '').trim();
-  if (!(trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed;
-
-  // Git porcelain uses C-style path quoting, including octal UTF-8 bytes.
-  return decodeGitQuotedPath(trimmed.slice(1, -1));
-}
-
-const GIT_C_QUOTE_ESCAPES = Object.freeze({
-  a: '\x07',
-  b: '\b',
-  f: '\f',
-  n: '\n',
-  r: '\r',
-  t: '\t',
-  v: '\v',
-  '"': '"',
-  '\\': '\\',
-});
-
-function decodeGitQuotedPath(value) {
-  const source = String(value ?? '');
-  const chunks = [];
-  let octalBytes = [];
-
-  function flushOctalBytes() {
-    if (!octalBytes.length) return;
-    chunks.push(Buffer.from(octalBytes).toString('utf8'));
-    octalBytes = [];
-  }
-
-  for (let i = 0; i < source.length; i += 1) {
-    const ch = source[i];
-    if (ch !== '\\') {
-      flushOctalBytes();
-      chunks.push(ch);
-      continue;
-    }
-
-    const escape = source[i + 1];
-    if (escape === undefined) {
-      flushOctalBytes();
-      chunks.push(ch);
-      continue;
-    }
-
-    if (/^[0-7]$/.test(escape)) {
-      let digits = escape;
-      let end = i + 2;
-      while (end < source.length && digits.length < 3 && /^[0-7]$/.test(source[end])) {
-        digits += source[end];
-        end += 1;
-      }
-      octalBytes.push(Number.parseInt(digits, 8));
-      i = end - 1;
-      continue;
-    }
-
-    flushOctalBytes();
-    if (Object.hasOwn(GIT_C_QUOTE_ESCAPES, escape)) {
-      chunks.push(GIT_C_QUOTE_ESCAPES[escape]);
-    } else {
-      chunks.push(`\\${escape}`);
-    }
-    i += 1;
-  }
-
-  flushOctalBytes();
-  return chunks.join('');
-}
-
-function parseGitStatusPathParts(statusPath) {
-  return splitStatusPathParts(statusPath).map((part) => unquoteGitPath(part));
-}
-
-function isCliStatePath(statusPath) {
-  return parseGitStatusPathParts(statusPath)
-    .some((part) => hasLocalStatePathSegment(part));
-}
-
-function statusPathFromPorcelainLine(line) {
-  const source = String(line || '');
-  if (!source.trim()) return '';
-  // Only parse `git status --short` / porcelain v1 lines: `XY path`.
-  // Scored copy/rename lines such as `R100 old -> new` are produced by other
-  // git commands and are intentionally outside this helper's contract.
-  if (/^[ MADRCUT?!][ MADRCUT?!] /.test(source)) return source.slice(3);
-  return '';
-}
-
-// CLI-owned local state should not appear dirty to the dirty-tree check or leak
-// into prompt context.
+// Parse `git status --porcelain=v1 -z` output. Records are NUL-terminated and
+// paths are emitted unquoted; for rename (R) and copy (C) entries Git emits the
+// new path first and the original path as the next NUL record. CLI-owned local
+// state is dropped so it does not appear dirty to the dirty-tree check or leak
+// into prompt context. Returns a newline-joined string for downstream display.
 export function filterCliStatus(status) {
-  return String(status || '')
-    .split('\n')
-    .filter((line) => {
-      return !isCliStatePath(statusPathFromPorcelainLine(line));
-    })
-    .join('\n');
+  const records = String(status || '').split('\0');
+  const kept = [];
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i];
+    if (!record) continue;
+    if (!PORCELAIN_LINE_RE.test(record)) {
+      kept.push(record);
+      continue;
+    }
+    const code = record[0];
+    const newPath = record.slice(3);
+    const isRenameOrCopy = code === 'R' || code === 'C';
+    let originalPath = '';
+    if (isRenameOrCopy && i + 1 < records.length) {
+      originalPath = records[i + 1] || '';
+      i += 1;
+    }
+    if (
+      hasLocalStatePathSegment(newPath)
+      || (isRenameOrCopy && hasLocalStatePathSegment(originalPath))
+    ) {
+      continue;
+    }
+    kept.push(isRenameOrCopy
+      ? `${record.slice(0, 3)}${originalPath} -> ${newPath}`
+      : record);
+  }
+  return kept.join('\n');
 }
 
 /**
@@ -293,7 +197,7 @@ export async function collectRepoContext(cwd, { changed = false, diffMaxBuffer }
     ? await fs.realpath(detectedRootRaw).catch(() => path.resolve(detectedRootRaw))
     : '';
   const isGit = Boolean(detectedRoot);
-  const status = await runGit(['status', '--short', '--', '.'], scopeRoot);
+  const status = await runGit(['status', '--porcelain=v1', '-z', '--', '.'], scopeRoot);
   const branch = await runGit(['branch', '--show-current'], scopeRoot);
   const head = await runGit(['rev-parse', '--short', 'HEAD'], scopeRoot);
   const stat = await runGit(changed ? ['diff', '--stat', 'HEAD', '--', '.'] : ['diff', '--stat', '--', '.'], scopeRoot);

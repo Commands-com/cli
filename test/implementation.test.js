@@ -8,10 +8,7 @@ import {
   runOrchestratedImplementationPhase,
 } from '../src/implementation.js';
 import { createImplementationTaskRunContext } from '../src/implementation-task-context.js';
-import {
-  applyImplementationPartialMergePolicy,
-  SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
-} from '../src/implementation-task-merge.js';
+import { applyImplementationPartialMergePolicy } from '../src/implementation-task-merge.js';
 import { collectRepoContext, runGit } from '../src/git.js';
 
 async function initGitRepo(cwd) {
@@ -512,7 +509,6 @@ test('runOrchestratedImplementationPhase returns batch-one success before batch-
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);
     assert.match(phase.error?.message, /partial implementation batch 2 failed:.*intentional task failure/);
-    assert.equal(SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY, 'successful-patches-before-batch-error');
     assert.equal(await fs.readFile(path.join(tmp, 'src', 'shared.txt'), 'utf8'), 'partial success\n');
     const implementation = phase.result;
     assert.deepEqual(implementation.batches, [['task-success'], ['task-failure']]);
@@ -576,7 +572,6 @@ test('applyImplementationPartialMergePolicy records merge conflict status and lo
       },
     });
     const result = await applyImplementationPartialMergePolicy({
-      policy: SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
       taskRunContext,
       useTaskWorktrees: true,
       successes: [

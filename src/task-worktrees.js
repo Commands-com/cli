@@ -245,7 +245,7 @@ export async function captureGitPatch(cwd, {
       runGit(diffArgs(['diff', '--binary'], baseRef, excludeCliState), captureCwd.cwd, diffOptions(60_000)),
       runGit(diffArgs(['diff', '--stat'], baseRef, excludeCliState), captureCwd.cwd, diffOptions(30_000)),
       runGit(diffArgs(['diff', '--name-only'], baseRef, excludeCliState), captureCwd.cwd, diffOptions(30_000)),
-      runGit(['status', '--short', '--', '.'], captureCwd.cwd, { timeoutMs: 30_000 }),
+      runGit(['status', '--porcelain=v1', '-z', '--', '.'], captureCwd.cwd, { timeoutMs: 30_000 }),
     ]);
 
     return {

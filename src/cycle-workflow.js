@@ -6,10 +6,7 @@ import {
   hasAnyFlag,
   stringOption,
 } from './command-options.js';
-import {
-  COMMAND_OPTIONS,
-  OPTION_RESOLVER,
-} from './command-option-schema.js';
+import { COMMAND_OPTIONS } from './command-option-schema.js';
 import { resolveRuntimeOptions } from './config.js';
 import {
   collectRepoContext,
@@ -330,15 +327,7 @@ export function mergeResumeOptions(storedOptions, nextOptions, flags) {
 }
 
 function cycleResumeOverrideFields(option) {
-  const explicitFields = Array.isArray(option.resumeOverrideFields)
-    ? option.resumeOverrideFields
-    : [];
-  const resolverFields = explicitFields.length
-    ? []
-    : option.resolve
-      .filter((field) => field.resolver === OPTION_RESOLVER.CYCLE)
-      .map((field) => field.field);
-  const fields = [...new Set([...explicitFields, ...resolverFields])]
+  const fields = (option.resumeOverrideFields ?? [])
     .filter((field) => !RESUME_ALWAYS_NEXT_FIELDS.has(field));
   return Object.freeze(fields);
 }

@@ -200,6 +200,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'changed',
     description: 'Scope prompts to the current git diff',
     scopes: [REVIEW, QUALITY, ROOM],
+    resumeOverrideFields: Object.freeze(['changed']),
     resolve: [
       cycleField('changed', false, SHARED_WORKFLOW),
       roomField('changed', false, SHARED_WORKFLOW),
@@ -231,6 +232,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'worktree',
     description: 'Run edits in an isolated git worktree',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['worktree']),
     resolve: cycleField('worktree', false, CYCLE_COMMAND),
   },
   {
@@ -243,12 +245,14 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'allow-dirty',
     description: 'Permit --fix on a dirty working tree',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['allowDirty']),
     resolve: cycleField('allowDirty', false, CYCLE_COMMAND),
   },
   {
     name: 'keep-worktree',
     description: 'Keep isolated worktrees after the run',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['keepWorktree']),
     resolve: cycleField('keepWorktree', false, CYCLE_COMMAND),
   },
   {
@@ -257,6 +261,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'positiveIntegerOption',
     description: `Cap review/quality fix loops (default: 1 report, 3 fix, ${COMMAND_OPTION_DEFAULTS.maxCycles.until} until)`,
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['maxCycles']),
     resolve: cycleField('maxCycles', cycleMaxCyclesFallback, CYCLE_COMMAND),
   },
   {
@@ -266,11 +271,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     description: `Cap parallel implementation CLIs (default: ${DEFAULT_MAX_IMPLEMENTERS}, max: ${MAX_IMPLEMENTERS})`,
     scopes: CYCLE_COMMANDS,
     max: MAX_IMPLEMENTERS,
-    resolve: cycleField(
-      'maxImplementers',
-      () => COMMAND_OPTION_DEFAULTS.maxImplementers,
-      CYCLE_COMMAND,
-    ),
+    resumeOverrideFields: Object.freeze(['maxImplementers']),
+    resolve: cycleField('maxImplementers', () => COMMAND_OPTION_DEFAULTS.maxImplementers, CYCLE_COMMAND),
   },
   {
     name: 'stall-cycles',
@@ -278,11 +280,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'nonNegativeIntegerOption',
     description: `Stop fix loops after unchanged progress repeats (default: ${COMMAND_OPTION_DEFAULTS.stallCycles}, 0 disables)`,
     scopes: CYCLE_COMMANDS,
-    resolve: cycleField(
-      'stallCycles',
-      () => COMMAND_OPTION_DEFAULTS.stallCycles,
-      CYCLE_COMMAND,
-    ),
+    resumeOverrideFields: Object.freeze(['stallCycles']),
+    resolve: cycleField('stallCycles', () => COMMAND_OPTION_DEFAULTS.stallCycles, CYCLE_COMMAND),
   },
   {
     name: 'reviewers',
@@ -304,11 +303,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'positiveIntegerOption',
     description: 'Limit room participants',
     scopes: [ROOM],
-    resolve: roomField(
-      'requestedParticipantLimit',
-      ({ participantFallback }) => participantFallback,
-      ROOM_COMMAND_GROUP,
-    ),
+    resolve: roomField('requestedParticipantLimit', ({ participantFallback }) => participantFallback, ROOM_COMMAND_GROUP),
   },
   {
     name: 'parallel',
@@ -344,6 +339,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'nonNegativeIntegerOption',
     description: 'Provider-call retries for transient failures (default: 1)',
     scopes: [...CYCLE_COMMANDS, ROOM],
+    resumeOverrideFields: Object.freeze(['providerRetries']),
     resolve: [
       cycleField(
         'providerRetries',
@@ -362,6 +358,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     value: '<cmd>',
     description: 'Shell command to run after implementation',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['testCommand']),
     resolve: cycleField('testCommand', '', CYCLE_COMMAND),
   },
   {
@@ -370,6 +367,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'positiveIntegerOption',
     description: 'Per-provider-call timeout',
     scopes: [REVIEW, QUALITY, ROOM, DOCTOR],
+    resumeOverrideFields: Object.freeze(['timeoutMs']),
     resolve: [
       cycleField(
         'timeoutMs',
@@ -400,6 +398,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'fail-on-issues',
     description: 'Exit non-zero when final issues or test failures remain',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['failOnIssues']),
     resolve: cycleField('failOnIssues', false, CYCLE_COMMAND),
   },
 ].map(defineOption));

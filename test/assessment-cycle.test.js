@@ -432,10 +432,11 @@ test('runAssessmentCycles refreshes lifecycle hook context after recording the c
     assert.equal(startCall.args.context, initialContext);
     assert.equal(startCall.args.runContext.context, startCall.args.context);
     assert.equal(startCall.args.runContext.priorFindings, '');
-    assert.equal(afterCall.args.context, initialContext);
+    assert.equal(afterCall.args.context, startCall.args.context);
     assert.equal(afterCall.args.runContext.context, afterCall.args.context);
-    assert.match(afterCall.args.runContext.priorFindings, /^## Synthesis/);
     assert.notEqual(afterCall.args.runContext, startCall.args.runContext);
+    assert.equal(afterCall.args.runContext.priorFindings, state.priorFindings);
+    assert.match(afterCall.args.runContext.priorFindings, /^## Synthesis/);
     assert.equal(afterCall.args.cycleRecord, state.cycles[0]);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });

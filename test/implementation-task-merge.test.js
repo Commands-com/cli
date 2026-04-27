@@ -6,7 +6,6 @@ import path from 'node:path';
 import {
   applyImplementationPartialMergePolicy,
   integrationPatchForBatch,
-  SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
 } from '../src/implementation-task-merge.js';
 import { runImplementationTask } from '../src/implementation-task-attempt.js';
 import {
@@ -359,7 +358,6 @@ test('applyImplementationPartialMergePolicy stops after first merge failure and 
 
   try {
     const result = await applyImplementationPartialMergePolicy({
-      policy: SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
       taskRunContext,
       useTaskWorktrees: true,
       successes: [

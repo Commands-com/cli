@@ -90,19 +90,6 @@ test('runCyclePreflight allows isolated or explicit dirty fix modes', async () =
   }
 });
 
-test('runCyclePreflight ignores CLI-owned status when checking dirty worktrees', async () => {
-  const state = testState({
-    status: '?? .commands-com/runs/20260426-151512-quality/report.md',
-    options: { fix: true },
-  });
-
-  const payload = await runCyclePreflight(state);
-  const dirtyCheck = payload.checks.find((check) => check.name === 'dirty-worktree');
-
-  assert.equal(payload.ok, true);
-  assert.equal(dirtyCheck.ok, true);
-});
-
 test('runCyclePreflight reports missing required runtime inputs together', async () => {
   const state = testState({
     options: {

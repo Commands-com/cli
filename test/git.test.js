@@ -249,19 +249,26 @@ test('collectRepoContext reports oversized changed diffs to callers', async () =
   }
 });
 
-test('filterCliStatus drops .commands-com entries from git status --short output', () => {
-  const input = [
+// Build a `git status --porcelain=v1 -z` buffer. Each record is NUL-terminated;
+// rename/copy entries emit the new path first followed by the original path as
+// a separate NUL record per Git's -z contract.
+function nulRecords(...records) {
+  return `${records.join('\0')}\0`;
+}
+
+test('filterCliStatus drops .commands-com entries from -z porcelain output', () => {
+  const input = nulRecords(
     ' M src/app.js',
     '?? .commands-com/',
     '?? .commands-com/runs/20260101-010203-review-foo/report.md',
     '?? packages/app/.commands-com/runs/20260101-010203-review-foo/report.md',
-    'R  old/.commands-com/report.md -> new/.commands-com/report.md',
-    'R  src/app.js -> ".commands-com/runs/report with spaces.md"',
-    'R  "old path/.commands-com/report.md" -> "new path/report.md"',
-    '?? "packages/app/.commands-com/run \\"quoted\\".md"',
+    'R  new/.commands-com/report.md', 'old/.commands-com/report.md',
+    'R  .commands-com/runs/report with spaces.md', 'src/app.js',
+    'R  new path/report.md', 'old path/.commands-com/report.md',
+    '?? packages/app/.commands-com/run "quoted".md',
     'A  README.md',
-    'R  "src/old -> still tracked.md" -> "src/new -> still tracked.md"',
-  ].join('\n');
+    'R  src/new -> still tracked.md', 'src/old -> still tracked.md',
+  );
   const filtered = filterCliStatus(input);
   assert.match(filtered, / M src\/app\.js/);
   assert.match(filtered, /A  README\.md/);
@@ -269,165 +276,153 @@ test('filterCliStatus drops .commands-com entries from git status --short output
   assert.doesNotMatch(filtered, /\.commands-com/);
 });
 
-test('filterCliStatus preserves quoted rename arrows while dropping CLI state renames', () => {
-  const keptRename = 'R  "src/old -> still tracked.md" -> "src/new -> still tracked.md"';
-  const keptEscapedArrow = 'R  "src/old \\" -> name.md" -> "src/new \\" -> name.md"';
-  const input = [
-    'R  "src/old -> tracked.md" -> ".commands-com/new -> cli.md"',
-    'R  ".commands-com/old -> cli.md" -> "src/restored -> name.md"',
-    'R  "src/old \\" -> name.md" -> ".commands-com/new \\" -> name.md"',
-    keptRename,
-    keptEscapedArrow,
-  ].join('\n');
+test('filterCliStatus preserves rename arrows in raw paths while dropping CLI state renames', () => {
+  const input = nulRecords(
+    'R  .commands-com/new -> cli.md', 'src/old -> tracked.md',
+    'R  src/restored -> name.md', '.commands-com/old -> cli.md',
+    'R  .commands-com/new " -> name.md', 'src/old " -> name.md',
+    'R  src/new -> still tracked.md', 'src/old -> still tracked.md',
+    'R  src/new " -> name.md', 'src/old " -> name.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptRename,
-    keptEscapedArrow,
+    'R  src/old -> still tracked.md -> src/new -> still tracked.md',
+    'R  src/old " -> name.md -> src/new " -> name.md',
   ].join('\n'));
 });
 
-test('filterCliStatus applies Git C-quoted UTF-8 octal escapes before CLI state filtering', () => {
-  const keptUtf8Path = String.raw`?? "src/caf\303\251\040notes.md"`;
-  const keptUtf8Rename = String.raw`R  "src/caf\303\251.md" -> "docs/na\303\257ve.md"`;
-  const input = [
-    String.raw`?? "src/\056commands-com/caf\303\251\040notes.md"`,
-    String.raw`R  "src/caf\303\251\040notes.md" -> "\056commands-com/na\303\257ve.md"`,
-    keptUtf8Path,
-    keptUtf8Rename,
-  ].join('\n');
+test('filterCliStatus filters CLI state paths with non-ASCII bytes', () => {
+  const input = nulRecords(
+    '?? src/.commands-com/café notes.md',
+    'R  .commands-com/naïve.md', 'src/café notes.md',
+    '?? src/café notes.md',
+    'R  docs/naïve.md', 'src/café.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptUtf8Path,
-    keptUtf8Rename,
+    '?? src/café notes.md',
+    'R  src/café.md -> docs/naïve.md',
   ].join('\n'));
 });
 
-test('filterCliStatus applies Git C control escapes before CLI state filtering', () => {
-  const keptControlPath = String.raw`?? "src/bell\a\vtab.md"`;
-  const input = [
-    String.raw`?? "src/\056commands-com/run\a\vtab.md"`,
-    keptControlPath,
-  ].join('\n');
+test('filterCliStatus filters CLI state paths with control bytes', () => {
+  const input = nulRecords(
+    '?? src/.commands-com/run\x07\vtab.md',
+    '?? src/bell\x07\vtab.md',
+  );
 
-  assert.equal(filterCliStatus(input), keptControlPath);
+  assert.equal(filterCliStatus(input), '?? src/bell\x07\vtab.md');
 });
 
-test('filterCliStatus handles renamed, copied, quoted, and escaped path entries', () => {
-  const keptRename = 'R  "src/old -> still tracked.md" -> "src/new -> still tracked.md"';
-  const keptCopy = 'C  "src/template.md" -> "src/copied \\"quoted\\".md"';
-  const keptLookalike = '?? "src/.commands-composer/file.md"';
-  const input = [
-    'R  ".commands-com/old -> cli.md" -> "src/restored.md"',
-    'R  "src/old -> tracked.md" -> ".commands-com/new -> cli.md"',
-    'C  "templates/base.md" -> "packages/app/.commands-com/copied.md"',
-    '?? "packages/app/.commands-com/run\\040space.md"',
-    keptRename,
-    keptCopy,
-    keptLookalike,
-  ].join('\n');
+test('filterCliStatus handles renamed and copied entries with raw special chars', () => {
+  const input = nulRecords(
+    'R  src/restored.md', '.commands-com/old -> cli.md',
+    'R  .commands-com/new -> cli.md', 'src/old -> tracked.md',
+    'C  packages/app/.commands-com/copied.md', 'templates/base.md',
+    '?? packages/app/.commands-com/run space.md',
+    'R  src/new -> still tracked.md', 'src/old -> still tracked.md',
+    'C  src/copied "quoted".md', 'src/template.md',
+    '?? src/.commands-composer/file.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptRename,
-    keptCopy,
-    keptLookalike,
+    'R  src/old -> still tracked.md -> src/new -> still tracked.md',
+    'C  src/template.md -> src/copied "quoted".md',
+    '?? src/.commands-composer/file.md',
   ].join('\n'));
 });
 
-test('filterCliStatus preserves tracked quoted paths with spaces while dropping CLI state', () => {
-  const keptModified = ' M "src/file with spaces.js"';
-  const keptAdded = 'A  "docs/release notes.md"';
-  const keptLookalike = '?? "packages/app/.commands-composer/run with spaces.md"';
-  const input = [
-    keptModified,
-    '?? ".commands-com/run with spaces.md"',
-    '?? "packages/app/.commands-com/run with spaces.md"',
-    'A  "packages/app/.commands-com/generated report.md"',
-    keptAdded,
-    keptLookalike,
-  ].join('\n');
+test('filterCliStatus preserves tracked paths with spaces while dropping CLI state', () => {
+  const input = nulRecords(
+    ' M src/file with spaces.js',
+    '?? .commands-com/run with spaces.md',
+    '?? packages/app/.commands-com/run with spaces.md',
+    'A  packages/app/.commands-com/generated report.md',
+    'A  docs/release notes.md',
+    '?? packages/app/.commands-composer/run with spaces.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptModified,
-    keptAdded,
-    keptLookalike,
+    ' M src/file with spaces.js',
+    'A  docs/release notes.md',
+    '?? packages/app/.commands-composer/run with spaces.md',
   ].join('\n'));
 });
 
-test('filterCliStatus parses multi-segment rename arrows before CLI state filtering', () => {
-  const keptMultiSegmentRename = 'R  src/alpha.md -> src/beta.md -> src/gamma.md';
-  const keptQuotedArrows = 'R  "src/old -> name.md" -> "src/new -> name.md"';
-  const input = [
-    'R  src/alpha.md -> .commands-com/beta.md -> src/gamma.md',
-    'R  src/alpha.md -> src/beta.md -> packages/app/.commands-com/gamma.md',
-    'R  ".commands-com/old -> generated.md" -> "src/restored.md"',
-    keptMultiSegmentRename,
-    keptQuotedArrows,
-  ].join('\n');
+test('filterCliStatus handles paths containing multiple " -> " sequences', () => {
+  const input = nulRecords(
+    'R  .commands-com/beta.md -> src/gamma.md', 'src/alpha.md',
+    'R  packages/app/.commands-com/gamma.md', 'src/alpha.md -> src/beta.md',
+    'R  src/restored.md', '.commands-com/old -> generated.md',
+    'R  src/beta.md -> src/gamma.md', 'src/alpha.md',
+    'R  src/new -> name.md', 'src/old -> name.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptMultiSegmentRename,
-    keptQuotedArrows,
+    'R  src/alpha.md -> src/beta.md -> src/gamma.md',
+    'R  src/old -> name.md -> src/new -> name.md',
   ].join('\n'));
 });
 
-test('filterCliStatus handles escaped quotes and backslashes before CLI state filtering', () => {
-  const keptEscapedRename = 'R  "src/old \\"quoted\\".md" -> "src/new \\\\backslash.md"';
-  const keptEscapedCopy = 'C  "src/template.md" -> "src/copied \\"quote\\" and -> arrow.md"';
-  const input = [
-    'R  "src/.commands-com/old \\"quoted\\".md" -> "src/restored.md"',
-    'R  "src/old.md" -> "src/.commands-com/new \\\\backslash.md"',
-    'C  "src/template.md" -> ".commands-com/copied \\"quoted\\".md"',
-    '?? "src/.commands-com/run\\040with\\040spaces.md"',
-    keptEscapedRename,
-    keptEscapedCopy,
-  ].join('\n');
+test('filterCliStatus handles paths with literal quote and backslash bytes', () => {
+  const input = nulRecords(
+    'R  src/restored.md', 'src/.commands-com/old "quoted".md',
+    'R  src/.commands-com/new \\backslash.md', 'src/old.md',
+    'C  .commands-com/copied "quoted".md', 'src/template.md',
+    '?? src/.commands-com/run with spaces.md',
+    'R  src/new \\backslash.md', 'src/old "quoted".md',
+    'C  src/copied "quote" and -> arrow.md', 'src/template.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptEscapedRename,
-    keptEscapedCopy,
+    'R  src/old "quoted".md -> src/new \\backslash.md',
+    'C  src/template.md -> src/copied "quote" and -> arrow.md',
   ].join('\n'));
 });
 
-test('filterCliStatus handles mixed quoted renames with octal and backslash escapes', () => {
-  const keptQuotedSource = String.raw`R  "src/old\040name\\draft.md" -> docs/new.md`;
-  const keptQuotedTarget = String.raw`R  src/plain.md -> "docs/new\040name\\draft.md"`;
-  const input = [
-    String.raw`R  "src/\056commands-com/old\040name\\draft.md" -> docs/restored.md`,
-    String.raw`R  src/plain.md -> "packages/app/\056commands-com/new\040name\\draft.md"`,
-    keptQuotedSource,
-    keptQuotedTarget,
-  ].join('\n');
+test('filterCliStatus handles renames with raw spaces and backslashes in either side', () => {
+  const input = nulRecords(
+    'R  docs/restored.md', 'src/.commands-com/old name\\draft.md',
+    'R  packages/app/.commands-com/new name\\draft.md', 'src/plain.md',
+    'R  docs/new.md', 'src/old name\\draft.md',
+    'R  docs/new name\\draft.md', 'src/plain.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptQuotedSource,
-    keptQuotedTarget,
+    'R  src/old name\\draft.md -> docs/new.md',
+    'R  src/plain.md -> docs/new name\\draft.md',
   ].join('\n'));
 });
 
-test('filterCliStatus handles Git C-quoted porcelain escapes before CLI state filtering', () => {
-  const keptTabPath = '?? "src/user\\tfile.md"';
-  const keptNewlineRename = 'R  "src/old\\nname.md" -> "src/new\\nname.md"';
-  const input = [
-    '?? "src/.commands-com/run\\twith\\nescapes.md"',
-    ' M "packages/app/.commands-com/report\\rwith\\tescapes.md"',
-    'R  "src/old\\nname.md" -> "src/.commands-com/new\\tname.md"',
-    'C  "src/template.md" -> ".commands-com/copied\\nname.md"',
-    keptTabPath,
-    keptNewlineRename,
-  ].join('\n');
+test('filterCliStatus filters CLI state paths with tab bytes', () => {
+  // Newlines in raw paths would conflict with the newline-joined return shape,
+  // so we exercise tab and carriage-return bytes here; the parser handles all
+  // raw bytes the same way.
+  const input = nulRecords(
+    '?? src/.commands-com/run\twith\rescapes.md',
+    ' M packages/app/.commands-com/report\rwith\tescapes.md',
+    'R  src/.commands-com/new\tname.md', 'src/old\rname.md',
+    'C  .commands-com/copied\rname.md', 'src/template.md',
+    '?? src/user\tfile.md',
+    'R  src/new\rname.md', 'src/old\rname.md',
+  );
 
   assert.equal(filterCliStatus(input), [
-    keptTabPath,
-    keptNewlineRename,
+    '?? src/user\tfile.md',
+    'R  src/old\rname.md -> src/new\rname.md',
   ].join('\n'));
 });
 
-test('filterCliStatus leaves scored copy and rename lines outside the git status contract', () => {
-  const input = [
+test('filterCliStatus passes through records that do not match the porcelain status prefix', () => {
+  const input = nulRecords(
     'R100 .commands-com/source.md -> src/restored.md',
     'C100 src/template.md -> packages/app/.commands-com/copied.md',
     'R100 src/old.md -> src/new.md',
-  ].join('\n');
+  );
 
-  assert.equal(filterCliStatus(input), input);
+  assert.equal(filterCliStatus(input), [
+    'R100 .commands-com/source.md -> src/restored.md',
+    'C100 src/template.md -> packages/app/.commands-com/copied.md',
+    'R100 src/old.md -> src/new.md',
+  ].join('\n'));
 });

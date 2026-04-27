@@ -15,8 +15,6 @@ import {
   implementationTaskWorkspace,
 } from './implementation-task-context.js';
 
-export const SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY = 'successful-patches-before-batch-error';
-
 export async function integrationPatchForBatch(taskRunContext, { useTaskWorktrees }) {
   if (!useTaskWorktrees) return { patch: '' };
   const { context } = implementationTaskWorkspace(taskRunContext);
@@ -40,15 +38,10 @@ export async function integrationPatchForBatch(taskRunContext, { useTaskWorktree
 }
 
 export async function applyImplementationPartialMergePolicy({
-  policy = SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY,
   taskRunContext,
   successes,
   useTaskWorktrees,
 }) {
-  if (policy !== SUCCESSFUL_PATCHES_BEFORE_BATCH_ERROR_POLICY) {
-    throw new Error(`unknown implementation partial merge policy: ${policy}`);
-  }
-
   const merged = [];
   const failures = [];
   let processed = 0;

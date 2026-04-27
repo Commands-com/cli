@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { filterCliStatus, getWorktreeDiffStatus, pruneIsolatedWorktree } from './git.js';
+import { getWorktreeDiffStatus, pruneIsolatedWorktree } from './git.js';
 import { DEFAULT_TIMEOUT_MS, SHELL_OUTPUT_CAP_BYTES } from './provider-limits.js';
 import { runProcess } from './process-runner.js';
 import { WORKSPACE_MODES } from './workflow-constants.js';
@@ -37,8 +37,9 @@ export function summarizeTestFailure(command, result) {
   ].filter(Boolean).join('\n');
 }
 
+// Callers must run `status` through `filterCliStatus` (see ./git.js) first; this helper treats any non-empty status as dirty.
 export function shouldBlockUnsafeFix({ fix, worktree, allowDirty, status }) {
-  return Boolean(fix && !worktree && !allowDirty && filterCliStatus(status).trim());
+  return Boolean(fix && !worktree && !allowDirty && String(status || '').trim());
 }
 
 function isSafeScopedRelativePath(relative) {

@@ -61,11 +61,11 @@ export async function runAssessmentCycles(state, adapter) {
   const recorder = createCycleRecorder(state);
   const startCycle = state.cycles.length + 1;
   for (let cycle = startCycle; cycle <= maxCycles; cycle += 1) {
-    const preImplementationContext = createAssessmentCycleContext(state, cycle);
-    await callOptional(adapter.logCycleStart, preImplementationContext);
+    const cycleContext = createAssessmentCycleContext(state, cycle);
+    await callOptional(adapter.logCycleStart, cycleContext);
 
     const phaseView = createCyclePhaseView(state);
-    const fanoutOptions = adapter.fanout(preImplementationContext);
+    const fanoutOptions = adapter.fanout(cycleContext);
     if (!isObjectRecord(fanoutOptions)) {
       throw new Error('runAssessmentCycles requires adapter.fanout to return options object');
     }
@@ -78,19 +78,19 @@ export async function runAssessmentCycles(state, adapter) {
       },
     });
 
-    const outputSummary = adapter.summarizeOutputs({ ...preImplementationContext, outputs });
-    const synthesisPrompt = adapter.buildSynthesisPrompt({ ...preImplementationContext, outputs });
+    const outputSummary = adapter.summarizeOutputs({ ...cycleContext, outputs });
+    const synthesisPrompt = adapter.buildSynthesisPrompt({ ...cycleContext, outputs });
     const { synthesisProvider, synthesisText, synthesisError } = await runSynthesisWithFallback(phaseView, {
       cycle,
       prompt: synthesisPrompt,
       fallbackDescription: adapter.synthesisFallbackDescription,
     });
     const cycleSummary = synthesisText.trim()
-      ? adapter.summarizeSynthesis({ ...preImplementationContext, outputs, outputSummary, synthesisText })
+      ? adapter.summarizeSynthesis({ ...cycleContext, outputs, outputSummary, synthesisText })
       : outputSummary;
 
     const adapterCycleRecord = adapter.buildCycleRecord({
-      ...preImplementationContext,
+      ...cycleContext,
       outputs,
       outputSummary,
       cycleSummary,
@@ -124,8 +124,7 @@ export async function runAssessmentCycles(state, adapter) {
       synthesisError,
     });
 
-    const preImplementationHandoffContext = createAssessmentCycleContext(state, cycle);
-    if (!state.options.fix || !adapter.hasFixableIssues({ ...preImplementationHandoffContext, cycleRecord })) {
+    if (!state.options.fix || !adapter.hasFixableIssues({ ...postRecordContext, cycleRecord })) {
       break;
     }
     if (shouldStopForStall(state, cycleRecord)) {
@@ -135,7 +134,7 @@ export async function runAssessmentCycles(state, adapter) {
       break;
     }
 
-    const implementationHandoff = adapter.implementation({ ...preImplementationHandoffContext, cycleRecord });
+    const implementationHandoff = adapter.implementation({ ...postRecordContext, cycleRecord });
     const implementationPhase = await runImplementationAndValidationPhase(phaseView, {
       cycle,
       findings: recorder.priorFindings,

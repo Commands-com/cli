@@ -13,13 +13,10 @@ import {
 const LOCAL_DIR = '.commands-com';
 
 test('shouldBlockUnsafeFix follows the fix/worktree/allowDirty/dirty-status truth table', () => {
-  const cliStatus = `?? ${LOCAL_DIR}/runs/20260101-010203-review/report.md`;
   const statusCases = [
     { name: 'empty status', status: '', dirty: false },
     { name: 'whitespace status', status: ' \n\t ', dirty: false },
-    { name: 'CLI-owned status only', status: cliStatus, dirty: false },
     { name: 'dirty status', status: ' M src/workflow.js\n?? test/workflow-safety.test.js', dirty: true },
-    { name: 'mixed CLI-owned and user status', status: `${cliStatus}\n M src/workflow.js`, dirty: true },
   ];
 
   for (const fix of [false, true]) {
@@ -37,30 +34,6 @@ test('shouldBlockUnsafeFix follows the fix/worktree/allowDirty/dirty-status trut
       }
     }
   }
-});
-
-test('shouldBlockUnsafeFix filters quoted, escaped, and octal-escaped CLI status before blocking', () => {
-  const cliOwnedStatus = [
-    `?? "${LOCAL_DIR}/runs/report with spaces.md"`,
-    String.raw`?? "${LOCAL_DIR}/runs/report \"quoted\".md"`,
-    String.raw`?? "\056commands-com/runs/report\040with\040spaces.md"`,
-    String.raw`R  "src/old.md" -> "\056commands-com/runs/new\040report.md"`,
-  ].join('\n');
-
-  assert.equal(
-    shouldBlockUnsafeFix({ fix: true, worktree: false, allowDirty: false, status: cliOwnedStatus }),
-    false,
-  );
-
-  assert.equal(
-    shouldBlockUnsafeFix({
-      fix: true,
-      worktree: false,
-      allowDirty: false,
-      status: `${cliOwnedStatus}\n M src/workflow.js`,
-    }),
-    true,
-  );
 });
 
 test('collectRepoContext filters quoted and escaped CLI-owned git status before unsafe fix blocking', async () => {
