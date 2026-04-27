@@ -49,6 +49,10 @@ export async function openResumeStore(cwd, runRef) {
   return openRunStore(dir, path.basename(dir));
 }
 
+/**
+ * @param {*} state
+ * @param {{ status?: string, error?: unknown }} [options]
+ */
 export async function writeRunState(state, {
   status = 'running',
   error,
@@ -57,6 +61,10 @@ export async function writeRunState(state, {
   return state.store.writeJson(artifactPath(RUN_STATE_FILE), runStatePayload(state, { status, error }));
 }
 
+/**
+ * @param {*} state
+ * @param {{ status?: string, error?: unknown }} [options]
+ */
 function runStatePayload(state, {
   status = 'running',
   error,

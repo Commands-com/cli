@@ -4,7 +4,11 @@ import {
   COMMON_OPTION_SCOPE,
 } from './command-registry.js';
 import { DEFAULT_TIMEOUT_MS } from './provider-limits.js';
-
+/** @typedef {'cycle'|'room'} OptionResolverKind */
+/** @typedef {'sharedWorkflow'|'cycleCommand'|'fanoutMode'|'roomCommand'} OptionResolverGroup */
+/** @typedef {'stringOption'|'booleanOption'|'positiveIntegerOption'|'nonNegativeIntegerOption'|'listOption'} OptionReader */
+/** @typedef {{resolver: OptionResolverKind, field: string, fallback: string|boolean|number|((context: {options?: Record<string, any>, participantFallback?: any}) => any), group: OptionResolverGroup}} OptionResolver */
+/** @typedef {{name: string, value?: string, description: string, scopes: ReadonlyArray<string>, aliases: ReadonlyArray<string>, readWith: OptionReader, resumeOverrideFields: ReadonlyArray<string>, resolve: ReadonlyArray<OptionResolver>, max?: number}} CommandOption */
 const DEFAULT_MAX_IMPLEMENTERS = 15;
 export const MAX_IMPLEMENTERS = 32;
 

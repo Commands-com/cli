@@ -36,24 +36,24 @@ function promptIntent(prompt) {
   return splitPromptIntent(prompt).intent;
 }
 
+function flagMap(flags) {
+  return new Map(Object.entries(flags));
+}
+
+function silentJsonLogger() {
+  return { jsonMode: true, info() {}, json() {} };
+}
+
+const ROOM_COMPLETED_PAYLOAD_KEYS = [
+  'type', 'runId', 'roomId', 'reportPath', 'outputs', 'synthesis', 'synthesisError',
+];
+
 test('runRoomCommand writes participant prompt with objective, role, guidance, and repo context', async () => {
   await withRoomRun(async (cwd) => {
     const result = await runRoomCommand({
       positionals: ['security', 'audit this CLI'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '1'],
-        ['no-synthesis', 'true'],
-        ['json', 'true'],
-      ]),
-    }, {
-      cwd,
-      logger: {
-        jsonMode: true,
-        info() {},
-        json() {},
-      },
-    });
+      flags: flagMap({ provider: 'mock', participants: '1', 'no-synthesis': 'true', json: 'true' }),
+    }, { cwd, logger: silentJsonLogger() });
     const run = await readSingleWorkflowRun(cwd);
     const prompt = await fs.readFile(
       path.join(run.runDir, 'prompts', 'mock-threat-modeler.md'),
@@ -78,19 +78,8 @@ test('runRoomCommand writes synthesis prompt with providers, participant roles, 
   await withRoomRun(async (cwd) => {
     await runRoomCommand({
       positionals: ['security', 'audit this CLI'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '2'],
-        ['json', 'true'],
-      ]),
-    }, {
-      cwd,
-      logger: {
-        jsonMode: true,
-        info() {},
-        json() {},
-      },
-    });
+      flags: flagMap({ provider: 'mock', participants: '2', json: 'true' }),
+    }, { cwd, logger: silentJsonLogger() });
     const run = await readSingleWorkflowRun(cwd);
     const prompt = await fs.readFile(path.join(run.runDir, 'prompts', 'synthesis-mock.md'), 'utf8');
 
@@ -197,10 +186,7 @@ test('room commands honor injected loggers', async () => {
     const roomMessages = [];
     const consoleOutcome = await captureConsoleOutcome(() => runRoomCommand({
       positionals: ['security', 'injected logger room'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '1'],
-      ]),
+      flags: flagMap({ provider: 'mock', participants: '1' }),
     }, {
       cwd,
       logger: {
@@ -237,14 +223,8 @@ test('runRoomCommand completion trusts the logger jsonMode without overriding it
 
     const result = await runRoomCommand({
       positionals: ['security', 'mutable logger mode'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '1'],
-      ]),
-    }, {
-      cwd,
-      logger,
-    });
+      flags: flagMap({ provider: 'mock', participants: '1' }),
+    }, { cwd, logger });
 
     assert.deepEqual(result, { failed: false, exitCode: 0 });
     assert.equal(logger.jsonMode, false);
@@ -257,10 +237,7 @@ test('runRoomCommand keeps room artifacts, metadata, and terminal output stable'
   await withRoomRun(async (cwd) => {
     const logs = await captureConsoleLogs(() => runRoomCommand({
       positionals: ['security', 'audit this CLI'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '1'],
-      ]),
+      flags: flagMap({ provider: 'mock', participants: '1' }),
     }, { cwd }));
 
     const { runIds, runId, runDir } = await readSingleWorkflowRun(cwd);
@@ -279,34 +256,14 @@ test('runRoomCommand keeps room artifacts, metadata, and terminal output stable'
 
     const metadata = JSON.parse(await fs.readFile(path.join(runDir, 'metadata.json'), 'utf8'));
     assert.deepEqual(Object.keys(metadata), [
-      'kind',
-      'roomId',
-      'title',
-      'objective',
-      'provider',
-      'model',
-      'changed',
-      'parallel',
-      'synthesize',
-      'providerRetries',
-      'timeoutMs',
-      'participants',
-      'createdAt',
+      'kind', 'roomId', 'title', 'objective', 'provider', 'model', 'changed', 'parallel',
+      'synthesize', 'providerRetries', 'timeoutMs', 'participants', 'createdAt',
     ]);
     const { createdAt, ...metadataWithoutCreatedAt } = metadata;
     assert.deepEqual(metadataWithoutCreatedAt, {
-      kind: 'room',
-      roomId: 'security',
-      title: 'Security Room',
-      objective: 'audit this CLI',
-      provider: 'mock',
-      model: '',
-      changed: false,
-      parallel: false,
-      synthesize: true,
-      providerRetries: 1,
-      timeoutMs: DEFAULT_TIMEOUT_MS,
-      participants: ['threat modeler'],
+      kind: 'room', roomId: 'security', title: 'Security Room', objective: 'audit this CLI',
+      provider: 'mock', model: '', changed: false, parallel: false, synthesize: true,
+      providerRetries: 1, timeoutMs: DEFAULT_TIMEOUT_MS, participants: ['threat modeler'],
     });
     assert.equal(Number.isNaN(Date.parse(createdAt)), false);
 
@@ -328,10 +285,7 @@ test('runRoomCommand keeps room phase boundaries observable in order', async () 
   await withRoomRun(async (cwd) => {
     const logs = await captureConsoleLogs(() => runRoomCommand({
       positionals: ['security', 'phase boundary room'],
-      flags: new Map([
-        ['provider', 'mock'],
-        ['participants', '2'],
-      ]),
+      flags: flagMap({ provider: 'mock', participants: '2' }),
     }, { cwd }));
 
     const { runId, runDir } = await readSingleWorkflowRun(cwd);
@@ -351,10 +305,7 @@ test('runRoomCommand keeps room phase boundaries observable in order', async () 
 
     const metadata = JSON.parse(await fs.readFile(path.join(runDir, 'metadata.json'), 'utf8'));
     assert.equal(metadata.synthesize, true);
-    assert.deepEqual(metadata.participants, [
-      'threat modeler',
-      'application security reviewer',
-    ]);
+    assert.deepEqual(metadata.participants, ['threat modeler', 'application security reviewer']);
 
     const report = await fs.readFile(reportPath, 'utf8');
     assert.match(report, /Mock room synthesis: participant outputs were combined into a final room report\./);
@@ -375,11 +326,7 @@ test('runRoomCommand retries transient participant provider failures', { skip: p
       ROOM_FAIL: 'participant-once',
     }, () => captureConsoleLogs(() => runRoomCommand({
       positionals: ['security', 'retry participant'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '1'],
-        ['retries', '1'],
-      ]),
+      flags: flagMap({ provider: 'claude', participants: '1', retries: '1' }),
     }, { cwd })));
 
     assert.ok(logs.includes('[room] claude/threat modeler: retry 1/1 after transient provider failure'));
@@ -411,11 +358,7 @@ test('runRoomCommand keeps JSON stdout safe when participant provider fails', { 
       ROOM_FAIL: 'all',
     }, () => captureConsoleOutcome(() => runRoomCommand({
       positionals: ['security', 'json safe participant failure'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '1'],
-        ['json', 'true'],
-      ]),
+      flags: flagMap({ provider: 'claude', participants: '1', json: 'true' }),
     }, { cwd })));
 
     assert.ok(outcome.error);
@@ -450,26 +393,14 @@ test('runRoomCommand keeps JSON stdout safe and writes synthesis error artifacts
       ROOM_FAIL: 'synthesis',
     }, () => captureConsoleOutcome(() => runRoomCommand({
       positionals: ['security', 'json safe synthesis failure'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '2'],
-        ['json', 'true'],
-      ]),
+      flags: flagMap({ provider: 'claude', participants: '2', json: 'true' }),
     }, { cwd })));
 
     assert.equal(outcome.error, null);
     assert.deepEqual(outcome.result, { failed: false, exitCode: 0 });
     assert.equal(outcome.logs.length, 1);
     const payload = JSON.parse(outcome.logs[0]);
-    assert.deepEqual(Object.keys(payload), [
-      'type',
-      'runId',
-      'roomId',
-      'reportPath',
-      'outputs',
-      'synthesis',
-      'synthesisError',
-    ]);
+    assert.deepEqual(Object.keys(payload), ROOM_COMPLETED_PAYLOAD_KEYS);
     assert.equal(payload.type, 'room.completed');
     assert.match(payload.runId, /^\d{8}-\d{6}-room-security-json-safe-synthesis-failure-[0-9a-f]{6}$/);
     assert.equal(payload.roomId, 'security');
@@ -512,11 +443,7 @@ test('runRoomCommand retries transient synthesis provider failures', { skip: pro
       ROOM_FAIL: 'synthesis-once',
     }, () => captureConsoleLogs(() => runRoomCommand({
       positionals: ['security', 'retry synthesis'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '2'],
-        ['retries', '1'],
-      ]),
+      flags: flagMap({ provider: 'claude', participants: '2', retries: '1' }),
     }, { cwd })));
 
     assert.ok(logs.includes('[room] synthesis (claude)'));
@@ -550,27 +477,14 @@ test('runRoomCommand records parallel room execution and writes synthesis output
       ROOM_PROVIDER_LOG: providerLog,
     }, () => captureConsoleOutcome(() => runRoomCommand({
       positionals: ['security', 'parallel room'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '2'],
-        ['parallel', 'true'],
-        ['json', 'true'],
-      ]),
+      flags: flagMap({ provider: 'claude', participants: '2', parallel: 'true', json: 'true' }),
     }, { cwd })));
 
     assert.equal(outcome.error, null);
     assert.deepEqual(outcome.result, { failed: false, exitCode: 0 });
     assert.equal(outcome.logs.length, 1);
     const payload = JSON.parse(outcome.logs[0]);
-    assert.deepEqual(Object.keys(payload), [
-      'type',
-      'runId',
-      'roomId',
-      'reportPath',
-      'outputs',
-      'synthesis',
-      'synthesisError',
-    ]);
+    assert.deepEqual(Object.keys(payload), ROOM_COMPLETED_PAYLOAD_KEYS);
     assert.equal(payload.type, 'room.completed');
     assert.equal(payload.roomId, 'security');
     assert.equal(payload.outputs.length, 2);
@@ -643,55 +557,48 @@ async function readRoleCount(binDir, safeRole) {
   }
 }
 
-test('runRoomCommand strict serial fan-out fails fast on the first rejecting participant without running later participants', { skip: process.platform === 'win32' }, async () => {
-  await withRoomRun(async (cwd) => {
-    const binDir = path.join(cwd, 'bin');
-    await writeRoleCountingFakeClaude(binDir);
+for (const scenario of [
+  {
+    mode: 'serial',
+    parallel: false,
+    objective: 'serial fail-fast',
+    expectReviewerCount: 0,
+    reviewerNote: 'second participant must not run after the first rejects in strict serial mode',
+  },
+  {
+    mode: 'parallel',
+    parallel: true,
+    objective: 'parallel strict reject',
+    expectReviewerCount: null,
+    reviewerNote: null,
+  },
+]) {
+  test(`runRoomCommand strict ${scenario.mode} fan-out rejects when a participant fails`, { skip: process.platform === 'win32' }, async () => {
+    await withRoomRun(async (cwd) => {
+      const binDir = path.join(cwd, 'bin');
+      await writeRoleCountingFakeClaude(binDir);
 
-    const outcome = await withEnv({
-      PATH: prependPathEntry(binDir),
-    }, () => captureConsoleOutcome(() => runRoomCommand({
-      positionals: ['security', 'serial fail-fast'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '2'],
-        ['retries', '0'],
-        ['no-synthesis', 'true'],
-      ]),
-    }, { cwd })));
+      const flags = { provider: 'claude', participants: '2', retries: '0', 'no-synthesis': 'true' };
+      if (scenario.parallel) flags.parallel = 'true';
 
-    assert.ok(outcome.error, 'serial strict fan-out must reject when the first participant fails');
-    assert.match(outcome.error.message, /participant|claude exited with 7/);
+      const outcome = await withEnv({
+        PATH: prependPathEntry(binDir),
+      }, () => captureConsoleOutcome(() => runRoomCommand({
+        positionals: ['security', scenario.objective],
+        flags: flagMap(flags),
+      }, { cwd })));
 
-    const threatModelerCount = await readRoleCount(binDir, 'threat-modeler');
-    const reviewerCount = await readRoleCount(binDir, 'application-security-reviewer');
-    assert.equal(threatModelerCount, 1, 'first participant ran exactly once');
-    assert.equal(reviewerCount, 0, 'second participant must not run after the first rejects in strict serial mode');
+      assert.ok(outcome.error, `${scenario.mode} strict fan-out must reject when a participant fails`);
+      assert.match(outcome.error.message, /participant|claude exited with 7/);
+
+      assert.equal(await readRoleCount(binDir, 'threat-modeler'), 1, 'first participant ran exactly once');
+      if (scenario.expectReviewerCount !== null) {
+        assert.equal(
+          await readRoleCount(binDir, 'application-security-reviewer'),
+          scenario.expectReviewerCount,
+          scenario.reviewerNote,
+        );
+      }
+    });
   });
-});
-
-test('runRoomCommand strict parallel fan-out rejects when any participant fails', { skip: process.platform === 'win32' }, async () => {
-  await withRoomRun(async (cwd) => {
-    const binDir = path.join(cwd, 'bin');
-    await writeRoleCountingFakeClaude(binDir);
-
-    const outcome = await withEnv({
-      PATH: prependPathEntry(binDir),
-    }, () => captureConsoleOutcome(() => runRoomCommand({
-      positionals: ['security', 'parallel strict reject'],
-      flags: new Map([
-        ['provider', 'claude'],
-        ['participants', '2'],
-        ['parallel', 'true'],
-        ['retries', '0'],
-        ['no-synthesis', 'true'],
-      ]),
-    }, { cwd })));
-
-    assert.ok(outcome.error, 'parallel strict fan-out must reject when any participant fails');
-    assert.match(outcome.error.message, /participant|claude exited with 7/);
-
-    const threatModelerCount = await readRoleCount(binDir, 'threat-modeler');
-    assert.equal(threatModelerCount, 1, 'first participant ran exactly once');
-  });
-});
+}

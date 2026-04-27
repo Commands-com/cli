@@ -35,6 +35,78 @@ function buildWorktreePlan(repoRoot, kind, label, now = timestamp(), suffix = ra
  */
 
 /**
+ * Repository context captured by `collectRepoContext`. The first three string
+ * fields are always present; the rest may be empty when git fails or the
+ * directory is not a git repository.
+ *
+ * @typedef {Object} RepoContext
+ * @property {boolean} isGit Whether `cwd` is inside a git working tree.
+ * @property {string} repoRoot Real path of the requested working directory.
+ * @property {string} gitRoot Real path of the detected git toplevel; empty when not a git repo.
+ * @property {string} branch Current branch name (empty for detached HEAD).
+ * @property {string} head Short HEAD sha.
+ * @property {string} status Filtered porcelain status text.
+ * @property {string} diffStat `git diff --stat` output.
+ * @property {string} diff `git diff` output, or the failure marker when capture failed.
+ * @property {string} diffError Failure marker emitted when changed-only diff capture failed.
+ */
+
+/**
+ * Diff/status snapshot for an isolated worktree, returned by
+ * `getWorktreeDiffStatus`.
+ *
+ * @typedef {Object} WorktreeDiffStatus
+ * @property {boolean} ok Whether both git invocations succeeded.
+ * @property {boolean} hasChanges Whether the worktree has any pending diff or status entries.
+ * @property {string} diffStat `git diff --stat` output.
+ * @property {string} status `git status --short` output.
+ */
+
+/**
+ * Worktree plan record produced by `buildWorktreePlan` and embedded in the
+ * `IsolatedWorktree` returned to callers.
+ *
+ * @typedef {Object} IsolatedWorktreePlan
+ * @property {string} id Stable worktree identifier (also used as a directory name).
+ * @property {string} branch Branch name created for the isolated worktree.
+ * @property {string} path Absolute filesystem path of the new worktree.
+ */
+
+/**
+ * Isolated worktree returned by `createIsolatedWorktree`. Extends the plan
+ * with the resolved base ref/sha and the original repo's pre-checkout state.
+ *
+ * @typedef {IsolatedWorktreePlan & {
+ *   baseRef: string,
+ *   baseSha: string,
+ *   originalRepoRoot: string,
+ *   originalStatus: string,
+ * }} IsolatedWorktree
+ */
+
+/**
+ * Workspace shape consumed by `pruneIsolatedWorktree`. Matches the
+ * `CycleWorkspace` mutation surface at the boundary.
+ *
+ * @typedef {Object} PruneWorktreeWorkspace
+ * @property {string} mode Workspace mode; only `worktree` is pruned.
+ * @property {string} [originalRepoRoot] Original repo root used for the prune command.
+ * @property {string} [path] Worktree path.
+ * @property {string} [cwd] Worktree cwd fallback.
+ * @property {string} [branch] Worktree branch deleted after prune.
+ */
+
+/**
+ * Result returned by `pruneIsolatedWorktree`.
+ *
+ * @typedef {Object} PruneWorktreeResult
+ * @property {boolean} ok Whether the prune succeeded (including skipped no-op cases).
+ * @property {boolean} [skipped] Whether the prune was a no-op for a non-worktree workspace.
+ * @property {string} [reason] Skip reason, when applicable.
+ * @property {string} [error] Failure detail when `ok` is false.
+ */
+
+/**
  * Run a git command and resolve with a stable result object instead of throwing.
  *
  * @param {string[]} args Git arguments.
@@ -145,6 +217,10 @@ function formatByteSize(bytes) {
   return `${value} bytes`;
 }
 
+/**
+ * @param {string} cwd
+ * @returns {Promise<string>}
+ */
 export async function getRepoRoot(cwd) {
   const root = await runGit(['rev-parse', '--show-toplevel'], cwd);
   return root.ok ? root.stdout.trim() : '';
@@ -155,6 +231,10 @@ export async function getRepoRoot(cwd) {
 // new path first and the original path as the next NUL record. CLI-owned local
 // state is dropped so it does not appear dirty to the dirty-tree check or leak
 // into prompt context. Returns a newline-joined string for downstream display.
+/**
+ * @param {string} status
+ * @returns {string}
+ */
 export function filterCliStatus(status) {
   const records = String(status || '').split('\0');
   const kept = [];
@@ -189,6 +269,7 @@ export function filterCliStatus(status) {
 /**
  * @param {string} cwd
  * @param {{ changed?: boolean, diffMaxBuffer?: number }} [options]
+ * @returns {Promise<RepoContext>}
  */
 export async function collectRepoContext(cwd, { changed = false, diffMaxBuffer } = {}) {
   const scopeRoot = await fs.realpath(cwd).catch(() => path.resolve(cwd));
@@ -224,6 +305,7 @@ export async function collectRepoContext(cwd, { changed = false, diffMaxBuffer }
   };
 }
 
+/** @param {{ stderr?: string, stdout?: string }} result */
 function gitContextFailureMessage(result) {
   const detail = conciseErrorDetail(result?.stderr || result?.stdout || 'git diff failed');
   return `[commands-com: git diff capture failed: ${detail}]`;
@@ -235,6 +317,11 @@ function conciseErrorDetail(value, maxLength = 1000) {
   return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
 }
 
+/**
+ * @param {string} worktreePath
+ * @param {string} [baseRef]
+ * @returns {Promise<WorktreeDiffStatus>}
+ */
 export async function getWorktreeDiffStatus(worktreePath, baseRef = 'HEAD') {
   const stat = await runGit(['diff', '--stat', baseRef, '--', '.'], worktreePath);
   const status = await runGit(['status', '--short'], worktreePath);
@@ -246,6 +333,10 @@ export async function getWorktreeDiffStatus(worktreePath, baseRef = 'HEAD') {
   };
 }
 
+/**
+ * @param {PruneWorktreeWorkspace} workspace
+ * @returns {Promise<PruneWorktreeResult>}
+ */
 export async function pruneIsolatedWorktree(workspace) {
   if (!workspace || workspace.mode !== WORKSPACE_MODES.WORKTREE) {
     return { ok: true, skipped: true, reason: 'not_worktree' };
@@ -265,6 +356,11 @@ export async function pruneIsolatedWorktree(workspace) {
   return { ok: true };
 }
 
+/**
+ * @param {string} cwd
+ * @param {{ kind?: string, label?: string, baseRef?: string }} [options]
+ * @returns {Promise<IsolatedWorktree>}
+ */
 export async function createIsolatedWorktree(cwd, { kind = 'review', label = 'run', baseRef = 'HEAD' } = {}) {
   const repoRoot = await getRepoRoot(cwd);
   if (!repoRoot) {

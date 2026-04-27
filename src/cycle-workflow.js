@@ -41,7 +41,9 @@ const RESUME_ALWAYS_NEXT_FIELDS = new Set(['json', 'resume']);
 
 export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
   COMMAND_OPTIONS.flatMap((option) => {
-    const fields = cycleResumeOverrideFields(option);
+    const fields = Object.freeze(
+      (option.resumeOverrideFields ?? []).filter((field) => !RESUME_ALWAYS_NEXT_FIELDS.has(field)),
+    );
     if (!fields.length) return [];
     return [Object.freeze({
       option: option.name,
@@ -71,6 +73,8 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  *
  * @typedef {Object} ResolveCycleOptionsArgs
  * @property {string} cwd Command working directory.
+ * @property {Object} [commandOptions] Pre-resolved cycle command options.
+ * @property {Object} [resumeOptions] Resume state options used to derive provider defaults.
  */
 
 /**
@@ -108,7 +112,7 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  * @param {ResolveCycleOptionsArgs} args Resolution args.
  * @returns {Promise<CycleRuntimeOptions>}
  */
-async function resolveCycleOptions(parsed, { cwd, commandOptions = resolveCycleCommandOptions(parsed.flags), resumeOptions } = {}) {
+async function resolveCycleOptions(parsed, { cwd, commandOptions = resolveCycleCommandOptions(parsed.flags), resumeOptions }) {
   const runtimeOptions = await resolveRuntimeOptions(cwd, parsed.flags);
   const storedProviderOptions = resumeProviderOptions(resumeOptions);
   const providerOptions = shouldUseResumeProviders(parsed.flags, commandOptions, storedProviderOptions)
@@ -174,6 +178,7 @@ export async function runCycleWorkflow(parsed, {
       writeSetupArtifacts: false,
     });
 
+  /** @type {import('./cycle-state.js').CycleWorkspace} */
   let workspace = {
     mode: WORKSPACE_MODES.CURRENT,
     cwd: originalContext.repoRoot,
@@ -321,15 +326,10 @@ export function mergeResumeOptions(storedOptions, nextOptions, flags) {
     for (const field of override.fields) merged[field] = nextOptions[field];
   }
 
-  merged.json = nextOptions.json;
-  merged.resume = nextOptions.resume;
+  for (const field of RESUME_ALWAYS_NEXT_FIELDS) {
+    merged[field] = nextOptions[field];
+  }
   return merged;
-}
-
-function cycleResumeOverrideFields(option) {
-  const fields = (option.resumeOverrideFields ?? [])
-    .filter((field) => !RESUME_ALWAYS_NEXT_FIELDS.has(field));
-  return Object.freeze(fields);
 }
 
 function logCycleWorkflowStart(state) {

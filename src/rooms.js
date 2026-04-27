@@ -81,6 +81,15 @@ function buildRoomSynthesisPrompt({ room, objective, outputs }) {
   });
 }
 
+/**
+ * @typedef {ReturnType<typeof import('./args.js').parseArgs>} ParsedCommand
+ * @typedef {{ cwd?: string, logger?: ReturnType<typeof createCommandLogger>, helpText?: string }} RoomCommandContext
+ */
+
+/**
+ * @param {ParsedCommand} parsed
+ * @param {RoomCommandContext} [context]
+ */
 export async function runRoomsCommand(parsed, { logger = createCommandLogger(parsed) } = {}) {
   const subcommand = parsed.positionals[0] || 'list';
   if (subcommand !== 'list') {
@@ -98,6 +107,10 @@ export async function runRoomsCommand(parsed, { logger = createCommandLogger(par
   return commandResult();
 }
 
+/**
+ * @param {ParsedCommand} parsed
+ * @param {RoomCommandContext} [context]
+ */
 export async function runRoomCommand(parsed, { cwd, logger = createCommandLogger(parsed, { kind: 'room' }) } = {}) {
   const roomRun = await resolveRoomRunOptions(parsed, { cwd, logger });
   const run = await setupRoomRun({ cwd, logger, roomRun });
@@ -128,10 +141,18 @@ async function resolveRoomRunOptions(parsed, { cwd, logger }) {
     timeoutMs,
     providerRetries,
     participantLimit,
-  } = resolveRoomCommandOptions(parsed.flags, {
+  } = /** @type {{
+    changed: boolean,
+    parallel: boolean,
+    synthesize: boolean,
+    timeoutMs: number,
+    providerRetries: number,
+    participantLimit: number,
+    json: boolean,
+  }} */ (resolveRoomCommandOptions(parsed.flags, {
     participantCount: room.participants.length,
     json: logger.jsonMode,
-  });
+  }));
   const participants = room.participants.slice(0, participantLimit);
 
   return {

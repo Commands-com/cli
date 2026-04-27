@@ -5,16 +5,44 @@ import {
   normalizedCycleScore,
 } from './cycle-summary.js';
 
+/**
+ * @typedef {import('./cycle-state.js').CycleState} CycleState
+ * @typedef {import('./assessment-report.js').AssessmentFinalCycle} AssessmentFinalCycle
+ */
+
+/**
+ * Terminal disposition recorded once a run stops looping. The status string
+ * appears in `final-summary.json` and the human-readable final report.
+ *
+ * @typedef {object} AssessmentFinalState
+ * @property {string} status
+ */
+
+/**
+ * Inputs for `writeAssessmentFinalReport`. `finalState` is structurally
+ * optional so the destructure-with-default pattern type-checks; the runtime
+ * `assertAssessmentFinalState` enforces that callers actually supply it.
+ *
+ * @typedef {object} WriteAssessmentFinalReportOptions
+ * @property {AssessmentFinalCycle} [finalCycle] Final cycle summary (defaults to last cycle).
+ * @property {AssessmentFinalState} [finalState] Terminal disposition; required at runtime.
+ * @property {string} [reportPath] Path to the detailed report, surfaced in the final summary.
+ */
+
+/**
+ * @param {CycleState} state
+ * @param {WriteAssessmentFinalReportOptions} [options]
+ */
 export async function writeAssessmentFinalReport(state, {
   finalCycle,
   finalState,
   reportPath,
 } = {}) {
-  assertAssessmentFinalState(finalState);
+  const validatedFinalState = assertAssessmentFinalState(finalState);
 
   const summary = buildAssessmentFinalSummary(state, {
     finalCycle,
-    finalState,
+    finalState: validatedFinalState,
     reportPath,
   });
   const finalReport = formatAssessmentFinalReport(summary);
@@ -33,11 +61,15 @@ function writeJson(store, name, value) {
   return store.write(name, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/**
+ * @param {CycleState} state
+ * @param {{ finalCycle?: AssessmentFinalCycle, finalState: AssessmentFinalState, reportPath?: string }} options
+ */
 function buildAssessmentFinalSummary(state, {
   finalCycle,
   finalState,
   reportPath = '',
-} = {}) {
+}) {
   const cycles = Array.isArray(state.cycles) ? state.cycles : [];
   const firstCycle = cycles[0] || {};
   const lastCycle = finalCycle || cycles[cycles.length - 1] || {};
@@ -111,8 +143,13 @@ function title(kind) {
   return `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;
 }
 
+/**
+ * @param {AssessmentFinalState | undefined} finalState
+ * @returns {AssessmentFinalState}
+ */
 function assertAssessmentFinalState(finalState) {
   if (!finalState || typeof finalState.status !== 'string' || finalState.status.length === 0) {
     throw new Error('writeAssessmentFinalReport requires finalState');
   }
+  return finalState;
 }

@@ -6,6 +6,33 @@ import {
 } from './cycle-summary.js';
 
 /**
+ * @typedef {import('./cycle-state.js').CycleState} CycleState
+ */
+
+/**
+ * Final-cycle summary used to render review/quality reports. Loose shape:
+ * the synthesizer fills score/issue/synopsis; reviewer/output and
+ * fanoutFailure arrays are mode-specific.
+ *
+ * @typedef {object} AssessmentFinalCycle
+ * @property {string} [score]
+ * @property {number} [issueCount]
+ * @property {number} [reviewerIssueCount]
+ * @property {number} [providerIssueCount]
+ * @property {string} [synopsis]
+ * @property {number} [cycle]
+ * @property {string} [synthesis]
+ * @property {string} [synthesisProvider]
+ * @property {string} [synthesisError]
+ * @property {string} [implementationPlan]
+ * @property {string} [implementation]
+ * @property {{ ok: boolean, exitCode?: number }} [test]
+ * @property {Array<{ provider: string, role?: string, text: string }>} [reviewers]
+ * @property {Array<{ provider: string, area?: string, text: string }>} [outputs]
+ * @property {Array<{ provider: string, item: string, error: string }>} [fanoutFailures]
+ */
+
+/**
  * Public assessment reporting facade.
  *
  * Review and quality commands import report rendering, issue predicates, and
@@ -35,6 +62,10 @@ export function selectQualityFinalCycleWithFallback(cycles) {
   return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, DEFAULT_QUALITY_FINAL_CYCLE);
 }
 
+/**
+ * @param {CycleState} state
+ * @param {{ objective?: string, finalCycle?: AssessmentFinalCycle }} [options]
+ */
 export function formatReviewReport(state, { objective, finalCycle } = {}) {
   const selectedFinalCycle = finalCycle || selectReviewFinalCycleWithFallback(state.cycles);
   return formatAssessmentReport({
@@ -59,15 +90,20 @@ export function formatReviewReport(state, { objective, finalCycle } = {}) {
   });
 }
 
+/**
+ * @param {CycleState} state
+ * @param {{ finalCycle?: AssessmentFinalCycle }} [options]
+ */
 export function formatQualityReport(state, { finalCycle } = {}) {
+  const selectedFinalCycle = finalCycle || selectQualityFinalCycleWithFallback(state.cycles);
   return formatAssessmentReport({
     title: 'Code Quality Report',
     state,
     summaryLines: [
-      `Score: ${finalCycle.score}`,
-      `Issue count: ${finalCycle.issueCount}`,
-      `Synopsis: ${finalCycle.synopsis}`,
-      ...fanoutFailuresSummaryLines(finalCycle),
+      `Score: ${selectedFinalCycle.score}`,
+      `Issue count: ${selectedFinalCycle.issueCount}`,
+      `Synopsis: ${selectedFinalCycle.synopsis}`,
+      ...fanoutFailuresSummaryLines(selectedFinalCycle),
     ],
     renderCycle: (cycle) => formatAssessmentCycle(cycle, {
       summaryLines: [

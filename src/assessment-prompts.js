@@ -2,6 +2,21 @@ import { compactPrompt, literalPrompt } from './prompt-intent.js';
 import { formatRepoContext } from './repo-context-prompt.js';
 import { ASSESSMENT_SUMMARY_CONTRACT } from './summary-contract.js';
 
+/**
+ * @typedef {import('./cycle-state.js').CycleRepoContext} CycleRepoContext
+ * @typedef {{ provider: string, text: string, role?: string, area?: string, score?: string, issueCount?: number, synopsis?: string }} AssessmentProviderOutput
+ * @typedef {Record<string, string|number|boolean|string[]>} AssessmentPromptIntent
+ * @typedef {{ summaryNoun: string, summaryContract: ReadonlyArray<string>, trailing?: ReadonlyArray<string> }} AssessmentPromptConfig
+ * @typedef {{ opening: string, instructionLines?: ReadonlyArray<string>, detailLines?: ReadonlyArray<string>, context: CycleRepoContext, bodyParts?: ReadonlyArray<string>, config: AssessmentPromptConfig, trailingIntro?: string, trailingLines?: ReadonlyArray<string> }} AssessmentPromptPartsArgs
+ * @typedef {{ intent: AssessmentPromptIntent, config: AssessmentPromptConfig, opening: string, guidance: string, objective?: string, cycle: number, scope?: string, context: CycleRepoContext, priorFindings?: string }} BuildFindingPromptArgs
+ * @typedef {{ intent: AssessmentPromptIntent, config: AssessmentPromptConfig, opening: string, instructions: string, detailLines: ReadonlyArray<string>, context: CycleRepoContext, outputsLabel: string, outputs: string, synthesisHasIssues: boolean, trailing: ReadonlyArray<string> }} BuildSynthesisPromptArgs
+ * @typedef {{ objective?: string, role: string, context: CycleRepoContext, cycle: number, priorFindings?: string }} BuildReviewPromptArgs
+ * @typedef {{ objective: string, context: CycleRepoContext, cycle: number, reviewerOutputs: ReadonlyArray<AssessmentProviderOutput> }} BuildReviewSynthesisPromptArgs
+ * @typedef {{ areas?: ReadonlyArray<string>, context: CycleRepoContext, changed?: boolean, cycle?: number, priorFindings?: string }} BuildQualityAuditPromptArgs
+ * @typedef {{ area: string, context: CycleRepoContext, changed?: boolean, cycle?: number, priorFindings?: string }} BuildQualityPromptArgs
+ * @typedef {{ areas: ReadonlyArray<string>, context: CycleRepoContext, cycle: number, outputs: ReadonlyArray<AssessmentProviderOutput> }} BuildQualitySynthesisPromptArgs
+ */
+
 const CURRENT_CODEBASE_SCOPE_GUIDANCE = 'Judge the current codebase, not hypothetical future polish; only prioritize issues worth fixing in the next cycle.';
 const SCORE_RUBRIC_GUIDANCE = [
   'Calibrate severity strictly: A means no high-leverage actionable issues remain; B means healthy code with a few meaningful non-urgent improvements; C means moderate repeated change cost; D means serious near-term risk; F means validation is red, behavior is broken, data can be lost, security is compromised, or the code is very hard to change.',
@@ -90,10 +105,13 @@ const QUALITY_SYNTHESIS_PROMPT_CONFIG = Object.freeze({
   summaryContract: ASSESSMENT_SUMMARY_CONTRACT,
 });
 
-function formatAssessmentOutputs(outputs, { heading, details = () => [] }) {
+/** @param {ReadonlyArray<AssessmentProviderOutput>} outputs
+ * @param {{ heading: (output: AssessmentProviderOutput) => string, details?: (output: AssessmentProviderOutput) => string[] }} options */
+function formatAssessmentOutputs(outputs, { heading, details }) {
+  const detailsFn = details || (() => []);
   return outputs
     .map((output) => {
-      const detailLines = details(output);
+      const detailLines = detailsFn(output);
       return [
         `## ${heading(output)}`,
         ...(detailLines.length ? ['', ...detailLines] : []),
@@ -104,6 +122,7 @@ function formatAssessmentOutputs(outputs, { heading, details = () => [] }) {
     .join('\n\n');
 }
 
+/** @param {ReadonlyArray<AssessmentProviderOutput>} outputs */
 export function formatReviewAssessmentOutputs(outputs) {
   return formatAssessmentOutputs(outputs, {
     heading: (output) => `${output.provider} / ${output.role}`,
@@ -115,6 +134,7 @@ export function formatReviewAssessmentOutputs(outputs) {
   });
 }
 
+/** @param {ReadonlyArray<AssessmentProviderOutput>} outputs */
 export function formatQualityAssessmentOutputs(outputs) {
   return formatAssessmentOutputs(outputs, {
     heading: (output) => `${output.provider} / ${output.area}`,
@@ -126,20 +146,30 @@ export function formatQualityAssessmentOutputs(outputs) {
   });
 }
 
+/** @param {ReadonlyArray<string>} areas */
 function qualityAreasLabel(areas) {
   return areas.map((area) => String(area)).join(', ');
 }
 
+/** @param {ReadonlyArray<string>} areas */
 function qualityGuidanceForAreas(areas) {
-  if (areas.length === 1) return QUALITY_AREA_GUIDANCE[areas[0]] || QUALITY_AREA_GUIDANCE.maintainability;
+  if (areas.length === 1) return guidanceForArea(areas[0]);
   return [
     'Assess all selected areas in one provider session so findings can share context instead of repeating separate scans.',
     'Choose one overall score for the current codebase across the selected areas.',
     'Area guidance:',
-    ...areas.map((area) => `- ${area}: ${QUALITY_AREA_GUIDANCE[area] || QUALITY_AREA_GUIDANCE.maintainability}`),
+    ...areas.map((area) => `- ${area}: ${guidanceForArea(area)}`),
   ].join('\n');
 }
 
+/** @param {string} area
+ * @returns {string} */
+function guidanceForArea(area) {
+  return /** @type {Record<string, string>} */ (QUALITY_AREA_GUIDANCE)[area]
+    || QUALITY_AREA_GUIDANCE.maintainability;
+}
+
+/** @param {AssessmentPromptConfig} config */
 function summaryContractParts(config) {
   return [
     `Return a concise Markdown ${config.summaryNoun} with this exact summary block at the top:`,
@@ -148,10 +178,12 @@ function summaryContractParts(config) {
   ];
 }
 
+/** @param {string} priorFindings */
 function priorFindingsPart(priorFindings) {
   return priorFindings ? ['', 'Previously reported findings:', priorFindings].join('\n') : '';
 }
 
+/** @param {AssessmentPromptPartsArgs} args */
 function assessmentPromptParts({
   opening,
   instructionLines = [],
@@ -179,6 +211,7 @@ function assessmentPromptParts({
   ];
 }
 
+/** @param {BuildFindingPromptArgs} args */
 function buildFindingPrompt({
   intent,
   config,
@@ -209,6 +242,7 @@ function buildFindingPrompt({
   });
 }
 
+/** @param {BuildSynthesisPromptArgs} args */
 function buildSynthesisPrompt({
   intent,
   config,
@@ -240,11 +274,13 @@ function buildSynthesisPrompt({
   });
 }
 
+/** @param {string} text */
 function promptTextHasIssues(text) {
   return /(?:issue_count|issue count):\s*[1-9]\d*/i.test(String(text || ''))
     || /verdict:\s*issues/i.test(String(text || ''));
 }
 
+/** @param {BuildReviewPromptArgs} args */
 export function buildReviewPrompt({ objective, role, context, cycle, priorFindings = '' }) {
   const guidance = REVIEW_ROLE_GUIDANCE[role] || REVIEW_ROLE_GUIDANCE.correctness;
   return buildFindingPrompt({
@@ -259,6 +295,7 @@ export function buildReviewPrompt({ objective, role, context, cycle, priorFindin
   });
 }
 
+/** @param {BuildReviewSynthesisPromptArgs} args */
 export function buildReviewSynthesisPrompt({ objective, context, cycle, reviewerOutputs }) {
   return buildSynthesisPrompt({
     intent: { kind: 'review-synthesis', cycle },
@@ -289,6 +326,7 @@ export function buildReviewSynthesisPrompt({ objective, context, cycle, reviewer
   });
 }
 
+/** @param {BuildQualityAuditPromptArgs} args */
 export function buildQualityAuditPrompt({ areas, context, changed, cycle = 1, priorFindings = '' }) {
   const selectedAreas = Array.isArray(areas) && areas.length ? areas.map((area) => String(area)) : ['maintainability'];
   const singleArea = selectedAreas.length === 1;
@@ -312,6 +350,7 @@ export function buildQualityAuditPrompt({ areas, context, changed, cycle = 1, pr
   });
 }
 
+/** @param {BuildQualityPromptArgs} args */
 export function buildQualityPrompt({ area, context, changed, cycle = 1, priorFindings = '' }) {
   return buildQualityAuditPrompt({
     areas: [area],
@@ -322,6 +361,7 @@ export function buildQualityPrompt({ area, context, changed, cycle = 1, priorFin
   });
 }
 
+/** @param {BuildQualitySynthesisPromptArgs} args */
 export function buildQualitySynthesisPrompt({ areas, context, cycle, outputs }) {
   return buildSynthesisPrompt({
     intent: { kind: 'quality-synthesis', cycle },

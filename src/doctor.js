@@ -17,6 +17,10 @@ function doctorProviderRequest(flags) {
     || 'all';
 }
 
+/**
+ * @param {Array<{id: string, path?: string}>} providers
+ * @param {{cwd?: string, model?: string, timeoutMs?: number}} [options]
+ */
 async function pingProviders(providers, { cwd, model = '', timeoutMs = 60_000 } = {}) {
   return Promise.all(providers.map(async (provider) => {
     const started = Date.now();
@@ -49,6 +53,10 @@ async function pingProviders(providers, { cwd, model = '', timeoutMs = 60_000 } 
   }));
 }
 
+/**
+ * @param {{flags: any}} parsed
+ * @param {{cwd?: string, logger?: any}} [context]
+ */
 export async function runDoctorCommand(parsed, { cwd = process.cwd(), logger } = {}) {
   if (!logger) {
     throw new Error('runDoctorCommand requires logger');

@@ -1,6 +1,31 @@
 import { artifactPath } from './artifact-paths.js';
+import { SCORE_ORDER } from './summary-contract.js';
 import { shouldBlockUnsafeFix } from './workflow.js';
 
+/**
+ * @typedef {import('./cycle-state.js').CycleState} CycleState
+ */
+
+/**
+ * Result of a single preflight gate. The collected `checks` array is written
+ * verbatim to `preflight.json` and joined into the failure message.
+ *
+ * @typedef {object} PreflightCheck
+ * @property {string} name Stable check identifier surfaced in artifacts and logs.
+ * @property {boolean} ok Whether the gate passed.
+ * @property {string} message Human-readable failure message; empty when `ok`.
+ */
+
+/**
+ * @typedef {object} PreflightResult
+ * @property {boolean} ok Whether every preflight gate passed.
+ * @property {Array<PreflightCheck>} checks Per-gate results, in declaration order.
+ */
+
+/**
+ * @param {CycleState} state
+ * @returns {Promise<PreflightResult>}
+ */
 export async function runCyclePreflight(state) {
   const checks = preflightChecks(state);
   const ok = checks.every((check) => check.ok);
@@ -20,6 +45,10 @@ export async function runCyclePreflight(state) {
   return payload;
 }
 
+/**
+ * @param {CycleState} state
+ * @returns {Array<PreflightCheck>}
+ */
 function preflightChecks(state) {
   const options = state?.options || {};
   const providers = Array.isArray(options.providers) ? options.providers : [];
@@ -53,9 +82,23 @@ function preflightChecks(state) {
       !options.fix || Math.max(0, Number(options.maxCycles || 0)) > 0,
       '--fix requires at least one cycle',
     ),
+    check(
+      'until-score',
+      options.untilScore === undefined
+        || options.untilScore === null
+        || (typeof options.untilScore === 'string' && options.untilScore.trim() === '')
+        || SCORE_ORDER.includes(options.untilScore),
+      `--until must be one of ${SCORE_ORDER.join(', ')}`,
+    ),
   ];
 }
 
+/**
+ * @param {string} name
+ * @param {unknown} ok
+ * @param {string} message
+ * @returns {PreflightCheck}
+ */
 function check(name, ok, message) {
   return {
     name,

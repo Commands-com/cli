@@ -27,6 +27,7 @@ import {
 } from './provider-item-workflow.js';
 import { providerFallbackChain, runWithProviderFallback } from './provider-fallback.js';
 
+/** @type {{ info(message?: string): void }} */
 const SILENT_LOGGER = Object.freeze({ info() {} });
 
 const IMPLEMENTATION_EXECUTION_MODES = Object.freeze({
@@ -173,7 +174,7 @@ export async function runOrchestratedImplementationPhase({
   maxImplementers = 6,
   parallel = true,
   retries = 1,
-  retryDelayMs,
+  retryDelayMs = undefined,
   logger = SILENT_LOGGER,
   logPrefix = 'review',
 }) {

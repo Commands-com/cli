@@ -1,6 +1,89 @@
 import { runProviderWithRetry } from './providers.js';
 
 /**
+ * @typedef {import('./cycle-state.js').CycleProvider} ProviderDescriptor
+ */
+
+/**
+ * Structured artifact writers created by `createProviderItemRunArtifacts`.
+ *
+ * @typedef {object} ProviderItemArtifacts
+ * @property {string} promptPath
+ * @property {string} outputPath
+ * @property {string} path
+ * @property {(prompt: string) => (void|Promise<void>)} writePrompt
+ * @property {(text: string) => (void|Promise<void>)} writeOutput
+ */
+
+/**
+ * Input shape for `providerItemHookPayload`. Optional fields appear only on
+ * the hook payloads that actually carry them (retry counts on retry hooks,
+ * sessionId on the post-run session hook, error on failure/invalid hooks).
+ *
+ * @typedef {object} ProviderItemHookPayload
+ * @property {ProviderDescriptor} [provider]
+ * @property {string} [label]
+ * @property {ProviderItemArtifacts} [artifacts]
+ * @property {Error} [error]
+ * @property {number} [retry]
+ * @property {number} [retries]
+ * @property {string} [sessionId]
+ */
+
+/**
+ * @typedef {object} ProviderItemExecution
+ * @property {boolean} [allowTools]
+ */
+
+/**
+ * @typedef {object} ProviderItemRetry
+ * @property {number} [retries]
+ * @property {number} [delayMs]
+ * @property {(payload: ProviderItemHookPayload) => string} [logMessage]
+ */
+
+/**
+ * @typedef {object} ProviderItemArtifactPolicy
+ * @property {(payload: ProviderItemHookPayload) => (void|Promise<void>)} [writeRetry]
+ * @property {(payload: ProviderItemHookPayload) => (void|Promise<void>)} [writeFailure]
+ */
+
+/**
+ * @typedef {object} ProviderItemOutputPolicy
+ * @property {boolean} [allowEmpty]
+ */
+
+/**
+ * @typedef {object} ProviderItemSession
+ * @property {string} [resumeSessionId]
+ * @property {(payload: ProviderItemHookPayload) => (void|Promise<void>)} [onSessionInvalid]
+ * @property {(payload: ProviderItemHookPayload) => (void|Promise<void>)} [onSession]
+ */
+
+/**
+ * Args bag consumed by `runProviderItem`. Parallel in spirit to
+ * `RunProviderOptions` in `provider-invocation.js`: a single options bag.
+ * Every field is marked optional at the type level so the `args = {}` default
+ * type-checks; runtime validation in `assertProviderItemRun` is the source of
+ * truth for which fields must actually be present (`provider`, `artifacts`).
+ *
+ * @typedef {object} RunProviderItemArgs
+ * @property {ProviderDescriptor} [provider]
+ * @property {string} [label]
+ * @property {string} [prompt]
+ * @property {ProviderItemArtifacts} [artifacts]
+ * @property {string} [cwd]
+ * @property {string} [model]
+ * @property {number} [timeoutMs]
+ * @property {{info?: (message: string) => void}} [logger]
+ * @property {ProviderItemExecution} [execution]
+ * @property {ProviderItemRetry} [retry]
+ * @property {ProviderItemArtifactPolicy} [artifactPolicy]
+ * @property {ProviderItemOutputPolicy} [outputPolicy]
+ * @property {ProviderItemSession} [session]
+ */
+
+/**
  * Create structured artifact writers for one provider/item run.
  *
  * @param {Object} args
@@ -29,31 +112,8 @@ export function createProviderItemRunArtifacts({
 /**
  * Run a single provider prompt and persist its prompt/output artifacts.
  *
- * @param {Object} args
- * @param {Object} args.provider Provider descriptor.
- * @param {string} args.label Human-readable item label for retry logs.
- * @param {string} args.prompt Provider prompt.
- * @param {Object} args.artifacts Structured artifact writers.
- * @param {string} args.cwd Provider working directory.
- * @param {string} [args.model] Provider model override.
- * @param {number} [args.timeoutMs] Provider timeout.
- * @param {Object} [args.logger] Optional logger.
- * @param {Object} [args.execution] Provider execution policy.
- * @param {boolean} [args.execution.allowTools] Whether provider tool use is allowed.
- * @param {Object} [args.retry] Provider retry policy.
- * @param {number} [args.retry.retries] Provider retry count.
- * @param {number} [args.retry.delayMs] Delay multiplier for transient retries.
- * @param {(args: Object) => string} [args.retry.logMessage] Optional retry log formatter.
- * @param {Object} [args.artifactPolicy] Optional retry/failure artifact policy.
- * @param {(args: Object) => (void|Promise<void>)} [args.artifactPolicy.writeRetry] Optional retry artifact hook.
- * @param {(args: Object) => (void|Promise<void>)} [args.artifactPolicy.writeFailure] Optional failure artifact hook.
- * @param {Object} [args.outputPolicy] Optional provider output policy.
- * @param {boolean} [args.outputPolicy.allowEmpty] Whether blank provider output is valid.
- * @param {Object} [args.session] Optional provider session policy.
- * @param {string} [args.session.resumeSessionId] Provider session id to resume.
- * @param {(args: Object) => (void|Promise<void>)} [args.session.onSessionInvalid] Hook called before retrying fresh.
- * @param {(args: Object) => (void|Promise<void>)} [args.session.onSession] Hook called with a fresh returned session id.
- * @returns {Promise<{artifact: Object, result: Object, text: string}>}
+ * @param {RunProviderItemArgs} [args]
+ * @returns {Promise<{artifact: ProviderItemArtifacts, result: Object, text: string}>}
  */
 export async function runProviderItem(args = {}) {
   const {
@@ -177,6 +237,9 @@ function normalizeProviderItemPolicies(args) {
   };
 }
 
+/**
+ * @param {ProviderItemHookPayload} args
+ */
 function providerItemHookPayload({
   provider,
   label,

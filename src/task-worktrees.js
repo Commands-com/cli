@@ -118,7 +118,7 @@ function requireGitRefSha(result, ref, description) {
 }
 
 // git serializes worktree creation via `worktrees/.lock`; concurrent `git worktree add` against the same repo can fail with `File exists`, so we sequence the add step through a process-local mutex.
-let worktreeAddChain = Promise.resolve();
+let worktreeAddChain = /** @type {Promise<any>} */ (Promise.resolve());
 function withWorktreeAddLock(fn) {
   const next = worktreeAddChain.then(fn, fn);
   worktreeAddChain = next.catch(() => {});
@@ -216,6 +216,7 @@ export async function prepareTaskWorktreeBaseline(worktree, patch = '') {
   };
 }
 
+/** @param {string} cwd @param {{ baseRef?: string, includeUntracked?: boolean, maxBuffer?: number, excludeCliState?: boolean, repoRelativePath?: string }} [options] */
 export async function captureGitPatch(cwd, {
   baseRef = 'HEAD',
   includeUntracked = false,
@@ -337,10 +338,7 @@ function emptyPatchCapture(error) {
   };
 }
 
-export async function applyGitPatch(cwd, patch, {
-  threeWay = true,
-  timeoutMs = 60_000,
-} = {}) {
+export async function applyGitPatch(cwd, patch, { threeWay = true, timeoutMs = 60_000 } = {}) {
   const text = String(patch || '');
   if (!text.trim()) {
     return { ok: true, skipped: true, stdout: '', stderr: '', exitCode: 0 };
@@ -365,6 +363,7 @@ export async function applyGitPatch(cwd, patch, {
   };
 }
 
+/** @param {{ label?: string, files?: Array<string>, assignedFiles?: Array<string> }} [args] */
 export function validatePatchFiles({ label = 'patch', files, assignedFiles } = {}) {
   const changedFiles = Array.isArray(files)
     ? files.map((file) => normalizeGitPath(file)).filter(Boolean)

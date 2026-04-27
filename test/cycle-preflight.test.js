@@ -52,8 +52,54 @@ test('runCyclePreflight writes a passing preflight payload', async () => {
       ['dirty-worktree', true, ''],
       ['test-command', true, ''],
       ['cycle-cap', true, ''],
+      ['until-score', true, ''],
     ],
   );
+});
+
+test('runCyclePreflight passes when --until is omitted', async () => {
+  const state = testState();
+
+  const payload = await runCyclePreflight(state);
+  const untilCheck = payload.checks.find((check) => check.name === 'until-score');
+
+  assert.equal(untilCheck.ok, true);
+  assert.equal(untilCheck.message, '');
+});
+
+test('runCyclePreflight passes when --until is a valid SCORE_ORDER value', async () => {
+  for (const score of ['A', 'B', 'C', 'D', 'F']) {
+    const state = testState({ options: { untilScore: score } });
+
+    const payload = await runCyclePreflight(state);
+    const untilCheck = payload.checks.find((check) => check.name === 'until-score');
+
+    assert.equal(untilCheck.ok, true, `expected ${score} to pass`);
+  }
+});
+
+test('runCyclePreflight fails with a usage message when --until is not a SCORE_ORDER value', async () => {
+  const state = testState({ options: { untilScore: 'Z' } });
+
+  await assert.rejects(
+    runCyclePreflight(state),
+    /--until must be one of A, B, C, D, F/,
+  );
+
+  const untilCheck = state.store.writes[0].value.checks.find((check) => check.name === 'until-score');
+  assert.equal(untilCheck.ok, false);
+  assert.match(untilCheck.message, /--until must be one of A, B, C, D, F/);
+});
+
+test('runCyclePreflight treats empty or whitespace --until as missing (matches resolver default)', async () => {
+  for (const value of ['', '   ', '\t']) {
+    const state = testState({ options: { untilScore: value } });
+
+    const payload = await runCyclePreflight(state);
+    const untilCheck = payload.checks.find((check) => check.name === 'until-score');
+
+    assert.equal(untilCheck.ok, true, `expected ${JSON.stringify(value)} to pass`);
+  }
 });
 
 test('runCyclePreflight blocks unsafe fix attempts in a dirty worktree', async () => {

@@ -8,9 +8,7 @@ import {
   integrationPatchForBatch,
 } from '../src/implementation-task-merge.js';
 import { runImplementationTask } from '../src/implementation-task-attempt.js';
-import {
-  writeTaskState,
-} from '../src/implementation-task-artifacts.js';
+import { writeTaskState } from '../src/implementation-task-artifacts.js';
 import { createImplementationTaskRunContext } from '../src/implementation-task-context.js';
 import { runGit } from '../src/git.js';
 import {
@@ -28,18 +26,30 @@ import {
   readTaskStatus,
 } from './support/git.js';
 
+const noopLogger = { info() {} };
+const skipOnWin32 = { skip: process.platform === 'win32' };
+
 async function pathExists(filePath) {
+  try { await fs.access(filePath); return true; } catch { return false; }
+}
+
+async function withTempDir(prefix, fn) {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), `commands-com-${prefix}-`));
+  const cleanups = [];
   try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
+    return await fn({ tmp, defer: (task) => cleanups.unshift(task) });
+  } finally {
+    for (const task of cleanups) {
+      try { await task(); } catch { /* best-effort cleanup */ }
+    }
+    await fs.rm(tmp, { recursive: true, force: true });
   }
 }
 
-const noopLogger = { info() {} };
-
-function createTaskMergeRunContext({ store, cycle = 1, context, workspace, provider = { id: 'mock-provider' }, assignment = {} }) {
+function createTaskMergeRunContext({
+  store, cycle = 1, context, workspace,
+  provider = { id: 'mock-provider' }, assignment = {},
+}) {
   return createImplementationTaskRunContext({
     execution: { provider, timeoutMs: 5_000, logger: noopLogger },
     taskWorkspace: { store, cycle, context, workspace },
@@ -47,36 +57,61 @@ function createTaskMergeRunContext({ store, cycle = 1, context, workspace, provi
   });
 }
 
-test('integration patches carry untracked files from earlier batches into later task worktrees', { skip: process.platform === 'win32' }, async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-implementation-multi-batch-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  let firstWorktree;
-  let secondWorktree;
+async function commitFiles(repo, message, files) {
+  await runGit(['add', ...files], repo);
+  await runGit([
+    '-c', 'user.email=test@example.com', '-c', 'user.name=Test User',
+    'commit', '-m', message,
+  ], repo);
+}
 
-  try {
+function makeSuccess(task, worktree, overrides = {}) {
+  return {
+    task,
+    worktree,
+    provider: 'mock-provider',
+    text: `implemented ${task.id}`,
+    attempt: 1,
+    baseline: { baselineRef: `baseline-${task.id}`, baselineSha: `baseline-sha-${task.id}` },
+    patch: '',
+    diffStat: '',
+    changedFiles: [],
+    ...overrides,
+  };
+}
+
+function mergedRecord(success) {
+  return {
+    task: success.task,
+    provider: success.provider,
+    text: success.text,
+    attempt: success.attempt,
+    worktree: success.worktree.cwd,
+    diffStat: success.diffStat,
+    changedFiles: success.changedFiles,
+    state: 'merged',
+  };
+}
+
+test('integration patches carry untracked files from earlier batches into later task worktrees', skipOnWin32, async () => {
+  await withTempDir('implementation-multi-batch', async ({ tmp, defer }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
     await fs.mkdir(repoRoot, { recursive: true });
     await initGitRepo(repoRoot);
 
-    const context = {
-      isGit: true,
-      gitRoot: repoRoot,
-      repoRoot,
-    };
+    const context = { isGit: true, gitRoot: repoRoot, repoRoot };
     const taskRunContext = createTaskMergeRunContext({
       store: fileStore(storeRoot, 'unit-multi-batch-run'),
       context,
       workspace: { mode: 'current', cwd: repoRoot },
     });
 
-    firstWorktree = await createTaskWorktree({
-      integrationCwd: repoRoot,
-      context,
-      taskRoot: tmp,
-      runId: 'unit-multi-batch-run',
-      cycle: 1,
-      taskId: 'task-creates-file',
+    const firstWorktree = await createTaskWorktree({
+      integrationCwd: repoRoot, context, taskRoot: tmp,
+      runId: 'unit-multi-batch-run', cycle: 1, taskId: 'task-creates-file',
     });
+    defer(() => removeTaskWorktree(firstWorktree));
     await fs.mkdir(path.join(firstWorktree.cwd, 'src'), { recursive: true });
     await fs.writeFile(
       path.join(firstWorktree.cwd, 'src', 'generated.js'),
@@ -85,8 +120,7 @@ test('integration patches carry untracked files from earlier batches into later 
     );
 
     const firstPatch = await captureGitPatch(firstWorktree.cwd, {
-      baseRef: 'HEAD',
-      includeUntracked: true,
+      baseRef: 'HEAD', includeUntracked: true,
     });
     assert.equal(firstPatch.ok, true);
     assert.deepEqual(firstPatch.files, ['src/generated.js']);
@@ -99,14 +133,11 @@ test('integration patches carry untracked files from earlier batches into later 
     assert.deepEqual(integrationPatch.files, ['src/generated.js']);
     assert.match(integrationPatch.patch, /diff --git a\/src\/generated\.js b\/src\/generated\.js/);
 
-    secondWorktree = await createTaskWorktree({
-      integrationCwd: repoRoot,
-      context,
-      taskRoot: tmp,
-      runId: 'unit-multi-batch-run',
-      cycle: 1,
-      taskId: 'task-uses-file',
+    const secondWorktree = await createTaskWorktree({
+      integrationCwd: repoRoot, context, taskRoot: tmp,
+      runId: 'unit-multi-batch-run', cycle: 1, taskId: 'task-uses-file',
     });
+    defer(() => removeTaskWorktree(secondWorktree));
     const baseline = await prepareTaskWorktreeBaseline(secondWorktree, integrationPatch.patch);
 
     assert.equal(baseline.committed, true);
@@ -114,35 +145,19 @@ test('integration patches carry untracked files from earlier batches into later 
       await fs.readFile(path.join(secondWorktree.cwd, 'src', 'generated.js'), 'utf8'),
       'export const generated = 1;\n',
     );
-  } finally {
-    for (const worktree of [firstWorktree, secondWorktree]) {
-      if (worktree) await removeTaskWorktree(worktree).catch(() => {});
-    }
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
-test('runImplementationTask rejects edits outside a scoped task worktree root', { skip: process.platform === 'win32' }, async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-scoped-task-outside-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  const appRoot = path.join(repoRoot, 'packages', 'app');
-  let failureWorktree;
+test('runImplementationTask rejects edits outside a scoped task worktree root', skipOnWin32, async () => {
+  await withTempDir('scoped-task-outside', async ({ tmp, defer }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
+    const appRoot = path.join(repoRoot, 'packages', 'app');
 
-  try {
     await fs.mkdir(appRoot, { recursive: true });
     await initGitRepo(repoRoot);
     await fs.writeFile(path.join(appRoot, 'README.md'), '# app\n', 'utf8');
-    await runGit(['add', 'packages/app/README.md'], repoRoot);
-    await runGit([
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'user.name=Test User',
-      'commit',
-      '-m',
-      'init app',
-    ], repoRoot);
+    await commitFiles(repoRoot, 'init app', ['packages/app/README.md']);
 
     const provider = await writeFakeProvider(path.join(tmp, 'bin'), 'codex', [
       '#!/usr/bin/env node',
@@ -152,38 +167,25 @@ test('runImplementationTask rejects edits outside a scoped task worktree root', 
       "fs.writeFileSync(path.join(process.cwd(), '..', 'sibling', 'outside-scope.js'), 'export const outside = true;\\n', 'utf8');",
       "console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'wrote outside scope' } }));",
     ]);
-    const context = {
-      isGit: true,
-      gitRoot: repoRoot,
-      repoRoot: appRoot,
-      branch: 'main',
-      head: 'abc123',
-      status: '',
-      diffStat: '',
-      diff: '',
-    };
+
     const taskRunContext = createTaskMergeRunContext({
       store: fileStore(storeRoot, 'unit-scoped-outside-run'),
       cycle: 2,
-      context,
+      context: {
+        isGit: true, gitRoot: repoRoot, repoRoot: appRoot,
+        branch: 'main', head: 'abc123', status: '', diffStat: '', diff: '',
+      },
       workspace: { mode: 'current', cwd: appRoot, originalRepoRoot: tmp },
       provider: { id: 'codex', command: provider },
-      assignment: {
-        objective: 'detect outside edits',
-        findings: '',
-        testCommand: 'npm test',
-      },
+      assignment: { objective: 'detect outside edits', findings: '', testCommand: 'npm test' },
     });
 
+    let failureWorktree;
     await assert.rejects(
       async () => {
         try {
           await runImplementationTask(taskRunContext, {
-            task: {
-              id: 'scoped-task',
-              title: 'Scoped task',
-              files: ['README.md'],
-            },
+            task: { id: 'scoped-task', title: 'Scoped task', files: ['README.md'] },
             integrationPatch: '',
             useTaskWorktrees: true,
           });
@@ -194,47 +196,35 @@ test('runImplementationTask rejects edits outside a scoped task worktree root', 
       },
       /patch validation failed: task scoped-task changed file outside assigned scope: \.\.\/sibling\/outside-scope\.js/,
     );
+    if (failureWorktree) defer(() => removeTaskWorktree(failureWorktree));
 
     const failedStatus = await readTaskStatus(storeRoot, 'scoped-task', 2);
     assert.equal(failedStatus.state, 'failed');
     assert.match(failedStatus.error, /outside assigned scope: \.\.\/sibling\/outside-scope\.js/);
-  } finally {
-    if (failureWorktree) await removeTaskWorktree(failureWorktree).catch(() => {});
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
 test('captureGitPatch keeps sibling edits visible and scoped merge rejects them', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-scoped-task-capture-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  const appRoot = path.join(repoRoot, 'packages', 'app');
-  const siblingRoot = path.join(repoRoot, 'packages', 'sibling');
+  await withTempDir('scoped-task-capture', async ({ tmp }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
+    const appRoot = path.join(repoRoot, 'packages', 'app');
+    const siblingRoot = path.join(repoRoot, 'packages', 'sibling');
 
-  try {
     await fs.mkdir(appRoot, { recursive: true });
     await fs.mkdir(siblingRoot, { recursive: true });
     await initGitRepo(repoRoot);
     await fs.writeFile(path.join(appRoot, 'README.md'), '# app\n', 'utf8');
     await fs.writeFile(path.join(siblingRoot, 'README.md'), '# sibling\n', 'utf8');
-    await runGit(['add', 'packages/app/README.md', 'packages/sibling/README.md'], repoRoot);
-    await runGit([
-      '-c',
-      'user.email=test@example.com',
-      '-c',
-      'user.name=Test User',
-      'commit',
-      '-m',
-      'init packages',
-    ], repoRoot);
+    await commitFiles(repoRoot, 'init packages', [
+      'packages/app/README.md', 'packages/sibling/README.md',
+    ]);
 
     await fs.appendFile(path.join(appRoot, 'README.md'), 'in scope\n', 'utf8');
     await fs.appendFile(path.join(siblingRoot, 'README.md'), 'outside scope\n', 'utf8');
 
     const patchInfo = await captureGitPatch(appRoot, {
-      baseRef: 'HEAD',
-      includeUntracked: true,
-      repoRelativePath: 'packages/app',
+      baseRef: 'HEAD', includeUntracked: true, repoRelativePath: 'packages/app',
     });
 
     assert.equal(patchInfo.ok, true, patchInfo.error);
@@ -255,17 +245,17 @@ test('captureGitPatch keeps sibling edits visible and scoped merge rejects them'
     const mergeResult = await applyImplementationPartialMergePolicy({
       taskRunContext,
       useTaskWorktrees: true,
-      successes: [{
-        task: { id: 'scoped-merge', title: 'Scoped merge', files: ['README.md'] },
-        provider: 'mock-provider',
-        text: 'patched scoped repo',
-        attempt: 1,
-        worktree: { cwd: path.join(tmp, 'missing-worktree') },
-        baseline: { baselineRef: 'HEAD', baselineSha: '' },
-        patch: patchInfo.patch,
-        diffStat: patchInfo.diffStat,
-        changedFiles: patchInfo.files,
-      }],
+      successes: [makeSuccess(
+        { id: 'scoped-merge', title: 'Scoped merge', files: ['README.md'] },
+        { cwd: path.join(tmp, 'missing-worktree') },
+        {
+          text: 'patched scoped repo',
+          baseline: { baselineRef: 'HEAD', baselineSha: '' },
+          patch: patchInfo.patch,
+          diffStat: patchInfo.diffStat,
+          changedFiles: patchInfo.files,
+        },
+      )],
     });
 
     assert.deepEqual(mergeResult.merged, []);
@@ -273,16 +263,12 @@ test('captureGitPatch keeps sibling edits visible and scoped merge rejects them'
     assert.match(mergeResult.failures[0].message, /merge validation failed: task scoped-merge changed file outside assigned scope: \.\.\/sibling\/README\.md/);
     assert.equal(await fs.readFile(path.join(appRoot, 'README.md'), 'utf8'), '# app\n');
     assert.equal(await fs.readFile(path.join(siblingRoot, 'README.md'), 'utf8'), '# sibling\n');
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
 test('captureGitPatch includes untracked files without changing git status', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-patch-status-'));
-  const repoRoot = path.join(tmp, 'repo');
-
-  try {
+  await withTempDir('patch-status', async ({ tmp }) => {
+    const repoRoot = path.join(tmp, 'repo');
     await fs.mkdir(repoRoot, { recursive: true });
     await initGitRepo(repoRoot);
     await fs.mkdir(path.join(repoRoot, 'src'), { recursive: true });
@@ -294,8 +280,7 @@ test('captureGitPatch includes untracked files without changing git status', asy
     assert.match(before.status, /\?\? src\//);
 
     const patchInfo = await captureGitPatch(repoRoot, {
-      baseRef: 'HEAD',
-      includeUntracked: true,
+      baseRef: 'HEAD', includeUntracked: true,
     });
 
     const after = await gitStateSnapshot(repoRoot);
@@ -304,131 +289,58 @@ test('captureGitPatch includes untracked files without changing git status', asy
     assert.deepEqual(patchInfo.files, ['README.md', 'src/new-file.js']);
     assert.match(patchInfo.patch, /diff --git a\/src\/new-file\.js b\/src\/new-file\.js/);
     assert.doesNotMatch(after.status, / A src\/new-file\.js/);
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
 test('applyImplementationPartialMergePolicy stops after first merge failure and writes conflict payload', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-implementation-merge-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  await fs.mkdir(repoRoot, { recursive: true });
-  await initGitRepo(repoRoot);
+  await withTempDir('implementation-merge', async ({ tmp }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
+    await fs.mkdir(repoRoot, { recursive: true });
+    await initGitRepo(repoRoot);
 
-  const store = fileStore(storeRoot);
-  const taskRunContext = createTaskMergeRunContext({
-    store,
-    cycle: 3,
-    context: { repoRoot },
-    workspace: { mode: 'current', cwd: repoRoot },
-  });
-  const successTask = {
-    id: 'task-a',
-    title: 'Successful task',
-    files: ['README.md'],
-  };
-  const secondSuccessTask = {
-    id: 'task-a2',
-    title: 'Second successful task',
-    files: ['README.md'],
-  };
-  const conflictTask = {
-    id: 'task-b',
-    title: 'Conflicting task',
-    files: ['README.md', 'src/conflict.js'],
-  };
-  const skippedTask = {
-    id: 'task-c',
-    title: 'Skipped after conflict',
-    files: ['README.md'],
-  };
-  const successWorktree = { cwd: path.join(tmp, 'task-a') };
-  const secondSuccessWorktree = { cwd: path.join(tmp, 'task-a2') };
-  const conflictWorktree = {
-    cwd: path.join(tmp, 'task-b', 'repo'),
-    path: path.join(tmp, 'task-b'),
-    baseSha: 'base-b',
-  };
-  const skippedWorktree = { cwd: path.join(tmp, 'task-c') };
-  const conflictBaseline = {
-    baselineRef: 'baseline-b',
-    baselineSha: 'baseline-sha-b',
-  };
+    const store = fileStore(storeRoot);
+    const taskRunContext = createTaskMergeRunContext({
+      store, cycle: 3,
+      context: { repoRoot },
+      workspace: { mode: 'current', cwd: repoRoot },
+    });
 
-  try {
+    const successTask = { id: 'task-a', title: 'Successful task', files: ['README.md'] };
+    const secondSuccessTask = { id: 'task-a2', title: 'Second successful task', files: ['README.md'] };
+    const conflictTask = { id: 'task-b', title: 'Conflicting task', files: ['README.md', 'src/conflict.js'] };
+    const skippedTask = { id: 'task-c', title: 'Skipped after conflict', files: ['README.md'] };
+
+    const successWorktree = { cwd: path.join(tmp, 'task-a') };
+    const secondSuccessWorktree = { cwd: path.join(tmp, 'task-a2') };
+    const conflictWorktree = {
+      cwd: path.join(tmp, 'task-b', 'repo'),
+      path: path.join(tmp, 'task-b'),
+      baseSha: 'base-b',
+    };
+    const skippedWorktree = { cwd: path.join(tmp, 'task-c') };
+    const conflictBaseline = { baselineRef: 'baseline-b', baselineSha: 'baseline-sha-b' };
+
+    const successes = [
+      makeSuccess(successTask, successWorktree),
+      makeSuccess(secondSuccessTask, secondSuccessWorktree),
+      makeSuccess(conflictTask, conflictWorktree, {
+        attempt: 2,
+        baseline: conflictBaseline,
+        patch: 'this is not a git patch\n',
+        diffStat: 'README.md | 1 +',
+        changedFiles: ['README.md'],
+      }),
+      makeSuccess(skippedTask, skippedWorktree),
+    ];
+
     const result = await applyImplementationPartialMergePolicy({
-      taskRunContext,
-      useTaskWorktrees: true,
-      successes: [
-        {
-          task: successTask,
-          provider: 'mock-provider',
-          text: 'implemented task a',
-          attempt: 1,
-          worktree: successWorktree,
-          baseline: { baselineRef: 'baseline-a', baselineSha: 'baseline-sha-a' },
-          patch: '',
-          diffStat: '',
-          changedFiles: [],
-        },
-        {
-          task: secondSuccessTask,
-          provider: 'mock-provider',
-          text: 'implemented task a2',
-          attempt: 1,
-          worktree: secondSuccessWorktree,
-          baseline: { baselineRef: 'baseline-a2', baselineSha: 'baseline-sha-a2' },
-          patch: '',
-          diffStat: '',
-          changedFiles: [],
-        },
-        {
-          task: conflictTask,
-          provider: 'mock-provider',
-          text: 'implemented task b',
-          attempt: 2,
-          worktree: conflictWorktree,
-          baseline: conflictBaseline,
-          patch: 'this is not a git patch\n',
-          diffStat: 'README.md | 1 +',
-          changedFiles: ['README.md'],
-        },
-        {
-          task: skippedTask,
-          provider: 'mock-provider',
-          text: 'implemented task c',
-          attempt: 1,
-          worktree: skippedWorktree,
-          baseline: { baselineRef: 'baseline-c', baselineSha: 'baseline-sha-c' },
-          patch: '',
-          diffStat: '',
-          changedFiles: [],
-        },
-      ],
+      taskRunContext, useTaskWorktrees: true, successes,
     });
 
     assert.deepEqual(result.merged, [
-      {
-        task: successTask,
-        provider: 'mock-provider',
-        text: 'implemented task a',
-        attempt: 1,
-        worktree: successWorktree.cwd,
-        diffStat: '',
-        changedFiles: [],
-        state: 'merged',
-      },
-      {
-        task: secondSuccessTask,
-        provider: 'mock-provider',
-        text: 'implemented task a2',
-        attempt: 1,
-        worktree: secondSuccessWorktree.cwd,
-        diffStat: '',
-        changedFiles: [],
-        state: 'merged',
-      },
+      mergedRecord(successes[0]),
+      mergedRecord(successes[1]),
     ]);
     assert.equal(result.failures.length, 1);
     assert.match(result.failures[0].message, /^implementer task-b merge-conflict: /);
@@ -437,17 +349,16 @@ test('applyImplementationPartialMergePolicy stops after first merge failure and 
     assert.equal(successStatus.state, 'merged');
     assert.deepEqual(successStatus.worktree, successWorktree);
     assert.equal(successStatus.worktreePath, successWorktree.cwd);
-    assert.equal(successStatus.baselineSha, 'baseline-sha-a');
+    assert.equal(successStatus.baselineSha, 'baseline-sha-task-a');
     assert.deepEqual(successStatus.cleanup, {
-      ok: false,
-      error: 'missing_task_worktree_metadata',
+      ok: false, error: 'missing_task_worktree_metadata',
     });
 
     const secondSuccessStatus = await readTaskStatus(storeRoot, 'task-a2', 3);
     assert.equal(secondSuccessStatus.state, 'merged');
     assert.deepEqual(secondSuccessStatus.worktree, secondSuccessWorktree);
     assert.equal(secondSuccessStatus.worktreePath, secondSuccessWorktree.cwd);
-    assert.equal(secondSuccessStatus.baselineSha, 'baseline-sha-a2');
+    assert.equal(secondSuccessStatus.baselineSha, 'baseline-sha-task-a2');
 
     const conflictStatus = await readTaskStatus(storeRoot, 'task-b', 3);
     assert.match(conflictStatus.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
@@ -481,17 +392,15 @@ test('applyImplementationPartialMergePolicy stops after first merge failure and 
       await pathExists(path.join(storeRoot, 'cycle-3', 'tasks', 'task-c', 'status.json')),
       false,
     );
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
-test('applyImplementationPartialMergePolicy removes worktrees of unmerged successes after a merge failure', { skip: process.platform === 'win32' }, async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-merge-cleanup-'));
-  const repoRoot = path.join(tmp, 'repo');
-  try {
+test('applyImplementationPartialMergePolicy removes worktrees of unmerged successes after a merge failure', skipOnWin32, async () => {
+  await withTempDir('merge-cleanup', async ({ tmp }) => {
+    const repoRoot = path.join(tmp, 'repo');
     await fs.mkdir(repoRoot, { recursive: true });
     await initGitRepo(repoRoot);
+
     const context = { isGit: true, gitRoot: repoRoot, repoRoot };
     const worktrees = [];
     for (let i = 1; i <= 4; i += 1) {
@@ -504,13 +413,15 @@ test('applyImplementationPartialMergePolicy removes worktrees of unmerged succes
       store: fileStore(path.join(tmp, 'store'), 'merge-cleanup-run'),
       context, workspace: { mode: 'current', cwd: repoRoot },
     });
-    const successes = worktrees.map((worktree, i) => ({
-      task: { id: `task-${i + 1}`, title: `Task ${i + 1}`, files: ['README.md'] },
-      provider: 'mock', text: '', attempt: 1, worktree,
-      baseline: { baselineRef: 'HEAD', baselineSha: worktree.baseSha },
-      patch: i === 1 ? 'this is not a git patch\n' : '',
-      diffStat: '', changedFiles: [],
-    }));
+    const successes = worktrees.map((worktree, i) => makeSuccess(
+      { id: `task-${i + 1}`, title: `Task ${i + 1}`, files: ['README.md'] },
+      worktree,
+      {
+        provider: 'mock', text: '',
+        baseline: { baselineRef: 'HEAD', baselineSha: worktree.baseSha },
+        patch: i === 1 ? 'this is not a git patch\n' : '',
+      },
+    ));
     const result = await applyImplementationPartialMergePolicy({
       taskRunContext, useTaskWorktrees: true, successes,
     });
@@ -521,51 +432,33 @@ test('applyImplementationPartialMergePolicy removes worktrees of unmerged succes
     assert.equal(await pathExists(worktrees[1].path), true);
     assert.equal(await pathExists(worktrees[2].path), false);
     assert.equal(await pathExists(worktrees[3].path), false);
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
 test('writeTaskState writes task and attempt status artifacts', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-attempt-state-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  await fs.mkdir(repoRoot, { recursive: true });
+  await withTempDir('attempt-state', async ({ tmp }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
+    await fs.mkdir(repoRoot, { recursive: true });
 
-  const store = fileStore(storeRoot);
-  const taskRunContext = createTaskMergeRunContext({
-    store,
-    cycle: 2,
-    context: { repoRoot },
-    workspace: { mode: 'current', cwd: repoRoot },
-  });
-  const task = {
-    id: 'status-task',
-    title: 'Status task',
-    files: ['src/status.js'],
-  };
+    const store = fileStore(storeRoot);
+    const taskRunContext = createTaskMergeRunContext({
+      store, cycle: 2,
+      context: { repoRoot },
+      workspace: { mode: 'current', cwd: repoRoot },
+    });
+    const task = { id: 'status-task', title: 'Status task', files: ['src/status.js'] };
+    const worktree = {
+      cwd: path.join(tmp, 'task-worktree', 'repo'),
+      path: path.join(tmp, 'task-worktree'),
+      baseSha: 'base-sha',
+    };
+    const baseline = { baselineRef: 'baseline-ref', baselineSha: 'baseline-sha' };
 
-  try {
     await writeTaskState(taskRunContext, {
-      task,
-      attempt: 2,
-      state: 'succeeded',
-      workspace: {
-        cwd: path.join(tmp, 'task-worktree'),
-        worktree: {
-          cwd: path.join(tmp, 'task-worktree', 'repo'),
-          path: path.join(tmp, 'task-worktree'),
-          baseSha: 'base-sha',
-        },
-        baseline: {
-          baselineRef: 'baseline-ref',
-          baselineSha: 'baseline-sha',
-        },
-      },
-      patchInfo: {
-        files: ['src/status.js'],
-        diffStat: 'src/status.js | 1 +',
-      },
+      task, attempt: 2, state: 'succeeded',
+      workspace: { cwd: path.join(tmp, 'task-worktree'), worktree, baseline },
+      patchInfo: { files: ['src/status.js'], diffStat: 'src/status.js | 1 +' },
       writeAttemptStatus: true,
     });
 
@@ -583,18 +476,11 @@ test('writeTaskState writes task and attempt status artifacts', async () => {
       attempt: 2,
       provider: 'mock-provider',
       files: ['src/status.js'],
-      worktree: {
-        cwd: path.join(tmp, 'task-worktree', 'repo'),
-        path: path.join(tmp, 'task-worktree'),
-        baseSha: 'base-sha',
-      },
-      worktreePath: path.join(tmp, 'task-worktree', 'repo'),
-      worktreeRoot: path.join(tmp, 'task-worktree'),
+      worktree,
+      worktreePath: worktree.cwd,
+      worktreeRoot: worktree.path,
       baseSha: 'base-sha',
-      baseline: {
-        baselineRef: 'baseline-ref',
-        baselineSha: 'baseline-sha',
-      },
+      baseline,
       baselineRef: 'baseline-ref',
       baselineSha: 'baseline-sha',
       changedFiles: ['src/status.js'],
@@ -603,45 +489,27 @@ test('writeTaskState writes task and attempt status artifacts', async () => {
       error: '',
       updatedAt: status.updatedAt,
     });
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });
 
 test('runImplementationTask creates worktree and records status through the public task runner', async () => {
-  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-attempt-workspace-'));
-  const storeRoot = path.join(tmp, 'store');
-  const repoRoot = path.join(tmp, 'repo');
-  await fs.mkdir(repoRoot, { recursive: true });
-  await initGitRepo(repoRoot);
+  await withTempDir('attempt-workspace', async ({ tmp }) => {
+    const storeRoot = path.join(tmp, 'store');
+    const repoRoot = path.join(tmp, 'repo');
+    await fs.mkdir(repoRoot, { recursive: true });
+    await initGitRepo(repoRoot);
 
-  const store = fileStore(storeRoot, 'unit-workspace-run');
-  const taskRunContext = createTaskMergeRunContext({
-    store,
-    cycle: 4,
-    provider: { id: 'mock' },
-    context: {
-      isGit: true,
-      gitRoot: repoRoot,
-      repoRoot,
-    },
-    workspace: {
-      mode: 'current',
-      cwd: repoRoot,
-      originalRepoRoot: tmp,
-    },
-  });
-  const task = {
-    id: 'setup-task',
-    title: 'Setup task',
-    files: ['README.md'],
-  };
+    const store = fileStore(storeRoot, 'unit-workspace-run');
+    const taskRunContext = createTaskMergeRunContext({
+      store, cycle: 4,
+      provider: { id: 'mock' },
+      context: { isGit: true, gitRoot: repoRoot, repoRoot },
+      workspace: { mode: 'current', cwd: repoRoot, originalRepoRoot: tmp },
+    });
+    const task = { id: 'setup-task', title: 'Setup task', files: ['README.md'] };
 
-  try {
     const result = await runImplementationTask(taskRunContext, {
-      task,
-      integrationPatch: '',
-      useTaskWorktrees: true,
+      task, integrationPatch: '', useTaskWorktrees: true,
     });
 
     const workspace = {
@@ -682,7 +550,5 @@ test('runImplementationTask creates worktree and records status through the publ
       error: '',
       updatedAt: status.updatedAt,
     });
-  } finally {
-    await fs.rm(tmp, { recursive: true, force: true });
-  }
+  });
 });

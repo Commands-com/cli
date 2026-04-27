@@ -114,10 +114,17 @@ export const REGISTERED_DISPATCH_NAMES = Object.freeze(
   COMMAND_REGISTRY.flatMap((command) => [command.name, ...command.aliases]),
 );
 
+/**
+ * @param {string} name
+ */
 export function commandForName(name) {
   return COMMAND_BY_NAME.get(name) || null;
 }
 
+/**
+ * @param {ReadonlyArray<{ helpUsage: string, helpDescription: string }>} [commands]
+ * @returns {string}
+ */
 export function formatCommandHelpRows(commands = COMMAND_REGISTRY) {
   return commands
     .map((command) => (

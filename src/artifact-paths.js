@@ -2,6 +2,7 @@ import { isObjectRecord } from './objects.js';
 import { safePathSegment } from './safe-path.js';
 
 const DEFAULT_ARTIFACT_SEGMENT = 'artifact';
+/** @type {ReadonlyArray<readonly [RegExp, string]>} */
 const ARTIFACT_FILE_NORMALIZATION_STEPS = Object.freeze([
   [/[^a-z0-9.]+/g, '-'],
   [/\.{2,}/g, '.'],
@@ -109,6 +110,10 @@ function joinArtifactPath(...segments) {
   return segments.filter(Boolean).join('/');
 }
 
+/**
+ * @param {{ cycle?: number|string, markdown?: boolean, prompt?: boolean }} [options]
+ * @param {...(string|string[])} segments
+ */
 function buildArtifactPath({ cycle, markdown = false, prompt = false } = {}, ...segments) {
   const normalized = normalizeArtifactPathSegments(segments, { finalFile: !prompt });
   const cycleSegment = cycle === undefined ? '' : cycleDirectory(cycle);

@@ -32,6 +32,15 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
 
 /**
  * @typedef {import('./cycle-state.js').CycleRecordBase} CycleRecordBase
+ * @typedef {import('./cycle-state.js').CycleLogger} CycleLogger
+ * @typedef {import('./cycle-state.js').CycleState} CycleState
+ * @typedef {import('./cycle-state.js').CycleRunContext} CycleRunContext
+ * @typedef {import('./cycle-state.js').CycleRepoContext} CycleRepoContext
+ * @typedef {import('./cycle-workflow.js').ParsedCycleCommand} ParsedCycleCommand
+ * @typedef {import('./cycle-workflow.js').RunCycleWorkflowDependencies} RunCycleWorkflowDependencies
+ * @typedef {import('./assessment-cycle.js').AssessmentCycleAdapter} AssessmentCycleAdapter
+ * @typedef {import('./assessment-cycle.js').AssessmentCycleProviderOutput} AssessmentCycleProviderOutput
+ * @typedef {import('./cycle-fanout.js').AssessmentFanoutItemDescriptor} AssessmentFanoutItemDescriptor
  */
 
 /**
@@ -43,12 +52,31 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
  * see how synthesis adjusted findings.
  *
  * @typedef {CycleRecordBase & {
- *   outputs?: Array<Object>,
+ *   outputs?: Array<AssessmentCycleProviderOutput>,
  *   providerIssueCount?: number,
  * }} QualityCycleRecord
  */
 
-export async function runQualityCommand(parsed, { cwd, logger = createCommandLogger(parsed, { kind: 'quality' }), dependencies = {} } = {}) {
+/**
+ * Test seam dependencies accepted by `runQualityCommand`. The bag may carry an
+ * override for `runCycleWorkflow` itself; remaining fields are spread into the
+ * inner workflow's own `dependencies` (see `RunCycleWorkflowDependencies`).
+ *
+ * @typedef {RunCycleWorkflowDependencies & { runCycleWorkflow?: typeof runCycleWorkflow }} RunQualityCommandDependencies
+ */
+
+/**
+ * @typedef {object} RunQualityCommandArgs
+ * @property {string} cwd Command working directory.
+ * @property {CycleLogger} [logger] Optional logger override (defaults to a quality logger).
+ * @property {RunQualityCommandDependencies} [dependencies] Optional test seam.
+ */
+
+/**
+ * @param {ParsedCycleCommand} parsed
+ * @param {RunQualityCommandArgs} args
+ */
+export async function runQualityCommand(parsed, { cwd, logger = createCommandLogger(parsed, { kind: 'quality' }), dependencies = {} }) {
   const descriptors = await resolveQualityAreaDescriptors(parsed, cwd);
   const areas = descriptors.map((descriptor) => descriptor.value);
   const { runCycleWorkflow: workflow = runCycleWorkflow, ...workflowDeps } = dependencies;
@@ -91,7 +119,7 @@ async function loadQualityAreas(parsed, cwd) {
     const { value: metadata } = await readRunMetadata(cwd, stringOption(parsed.flags, 'resume', ''));
     if (Array.isArray(metadata.areas) && metadata.areas.length) return metadata.areas;
   }
-  return listOption(parsed.flags, 'area', DEFAULT_AREAS);
+  return listOption(parsed.flags, 'area', /** @type {string[]} */ (DEFAULT_AREAS));
 }
 
 function createQualityAssessmentAdapter({ areas, descriptors }) {

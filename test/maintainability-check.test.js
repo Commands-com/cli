@@ -29,13 +29,8 @@ test('syntax check scans configured roots and reports broken JavaScript', async 
   const repoRoot = await createTempRepo(t);
   const stdout = [];
   const stderr = [];
-  await writeFile(path.join(repoRoot, 'src', 'index.js'), [
-    'const value = 1;',
-    'void value;',
-  ]);
-  await writeFile(path.join(repoRoot, 'test', 'broken.test.js'), [
-    'function broken(',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), ['const value = 1;', 'void value;']);
+  await writeFile(path.join(repoRoot, 'test', 'broken.test.js'), ['function broken(']);
 
   const result = checkSyntax({
     repoRoot,
@@ -46,10 +41,7 @@ test('syntax check scans configured roots and reports broken JavaScript', async 
   assert.equal(result.ok, false);
   assert.deepEqual(
     result.checkedFiles.map((file) => path.relative(repoRoot, file)),
-    [
-      path.join('src', 'index.js'),
-      path.join('test', 'broken.test.js'),
-    ],
+    [path.join('src', 'index.js'), path.join('test', 'broken.test.js')],
   );
   assert.equal(result.failures.length, 1);
   assert.equal(path.relative(repoRoot, result.failures[0].file), path.join('test', 'broken.test.js'));
@@ -60,14 +52,10 @@ test('syntax check scans configured roots and reports broken JavaScript', async 
 test('maintainability check skips excluded runtime roots', async (t) => {
   const repoRoot = await createTempRepo(t);
   await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: ['src/generated'],
-      maxRuntimeFileLines: 2,
-    },
+    maintainabilityGuard: { excludedRoots: ['src/generated'], maxRuntimeFileLines: 2 },
   });
-  await writeLines(path.join(repoRoot, 'src', 'index.js'), 2);
-  await writeLines(path.join(repoRoot, 'src', 'generated', 'oversized.js'), 4);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), 2);
+  await writeFile(path.join(repoRoot, 'src', 'generated', 'oversized.js'), 4);
 
   const result = checkMaintainability({ repoRoot });
 
@@ -81,10 +69,7 @@ test('maintainability check requires compiler guard flags to stay enabled', asyn
 
   for (const flag of Object.keys(REQUIRED_COMPILER_OPTIONS)) {
     await writeConfig(repoRoot, {
-      compilerOptions: {
-        ...REQUIRED_COMPILER_OPTIONS,
-        [flag]: false,
-      },
+      compilerOptions: { ...REQUIRED_COMPILER_OPTIONS, [flag]: false },
     });
 
     assert.throws(
@@ -96,43 +81,28 @@ test('maintainability check requires compiler guard flags to stay enabled', asyn
 
 test('maintainability check rejects invalid runtime roots', async (t) => {
   const repoRoot = await createTempRepo(t);
-
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
+  const cases = [
+    {
       runtimeRoots: ['../outside'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
+      expected: /maintainabilityGuard\.runtimeRoots must contain repo-relative paths/,
     },
-  });
-  assert.throws(
-    () => checkMaintainability({ repoRoot }),
-    /maintainabilityGuard\.runtimeRoots must contain repo-relative paths/,
-  );
-
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
+    {
       runtimeRoots: ['missing'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
+      expected: /runtimeRoots entry must be an existing directory: missing/,
     },
-  });
-  assert.throws(
-    () => checkMaintainability({ repoRoot }),
-    /runtimeRoots entry must be an existing directory: missing/,
-  );
+  ];
+
+  for (const { runtimeRoots, expected } of cases) {
+    await writeConfig(repoRoot, { maintainabilityGuard: { runtimeRoots } });
+    assert.throws(() => checkMaintainability({ repoRoot }), expected);
+  }
 });
 
 test('maintainability check reports oversized runtime files', async (t) => {
   const repoRoot = await createTempRepo(t);
   const stderr = [];
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 2,
-    },
-  });
-  await writeLines(path.join(repoRoot, 'src', 'large.js'), 3);
+  await writeConfig(repoRoot, { maintainabilityGuard: { maxRuntimeFileLines: 2 } });
+  await writeFile(path.join(repoRoot, 'src', 'large.js'), 3);
 
   const result = checkMaintainability({
     repoRoot,
@@ -155,22 +125,16 @@ test('maintainability check reports test file sizes without failing', async (t) 
   const repoRoot = await createTempRepo(t);
   const stdout = [];
   await writeConfig(repoRoot, {
-    include: [
-      'src/**/*.js',
-      'test/small.test.js',
-    ],
+    include: ['src/**/*.js', 'test/small.test.js'],
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
       testFileReportRoots: ['test'],
       testFileReportLimit: 2,
     },
   });
-  await writeLines(path.join(repoRoot, 'src', 'index.js'), 2);
-  await writeLines(path.join(repoRoot, 'test', 'large.test.js'), 6);
-  await writeLines(path.join(repoRoot, 'test', 'medium.test.js'), 4);
-  await writeLines(path.join(repoRoot, 'test', 'small.test.js'), 2);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), 2);
+  await writeFile(path.join(repoRoot, 'test', 'large.test.js'), 6);
+  await writeFile(path.join(repoRoot, 'test', 'medium.test.js'), 4);
+  await writeFile(path.join(repoRoot, 'test', 'small.test.js'), 2);
 
   const result = checkMaintainability({
     repoRoot,
@@ -197,74 +161,44 @@ test('maintainability check reports test file sizes without failing', async (t) 
   ]);
 });
 
-test('maintainability check warns for oversized test files without failing', async (t) => {
-  const repoRoot = await createTempRepo(t);
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
-      testFileReportRoots: ['test'],
-      maxTestFileLines: 3,
-      testFileSizePolicy: 'warn',
-    },
-  });
-  await writeLines(path.join(repoRoot, 'src', 'index.js'), 1);
-  await writeLines(path.join(repoRoot, 'test', 'large.test.js'), 4);
-  await writeLines(path.join(repoRoot, 'test', 'small.test.js'), 2);
+test('maintainability check honors testFileSizePolicy for oversized test files', async (t) => {
+  const cases = [
+    { policy: 'warn', ok: true },
+    { policy: 'fail', ok: false },
+  ];
 
-  const result = checkMaintainability({ repoRoot });
+  for (const { policy, ok } of cases) {
+    const repoRoot = await createTempRepo(t);
+    await writeConfig(repoRoot, {
+      maintainabilityGuard: {
+        testFileReportRoots: ['test'],
+        maxTestFileLines: 2,
+        testFileSizePolicy: policy,
+      },
+    });
+    await writeFile(path.join(repoRoot, 'src', 'index.js'), 1);
+    await writeFile(path.join(repoRoot, 'test', 'large.test.js'), 3);
 
-  assert.equal(result.ok, true);
-  assert.equal(result.testFileSizePolicy, 'warn');
-  assert.deepEqual(
-    result.oversizedTestFiles.map(({ file, lineCount }) => ({
-      file: path.relative(repoRoot, file),
-      lineCount,
-    })),
-    [{ file: path.join('test', 'large.test.js'), lineCount: 4 }],
-  );
-});
+    const result = checkMaintainability({ repoRoot });
 
-test('maintainability check fails for oversized test files when configured', async (t) => {
-  const repoRoot = await createTempRepo(t);
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
-      testFileReportRoots: ['test'],
-      maxTestFileLines: 2,
-      testFileSizePolicy: 'fail',
-    },
-  });
-  await writeLines(path.join(repoRoot, 'src', 'index.js'), 1);
-  await writeLines(path.join(repoRoot, 'test', 'large.test.js'), 3);
-
-  const result = checkMaintainability({ repoRoot });
-
-  assert.equal(result.ok, false);
-  assert.equal(result.testFileSizePolicy, 'fail');
-  assert.deepEqual(
-    result.oversizedTestFiles.map(({ file, lineCount }) => ({
-      file: path.relative(repoRoot, file),
-      lineCount,
-    })),
-    [{ file: path.join('test', 'large.test.js'), lineCount: 3 }],
-  );
+    assert.equal(result.ok, ok);
+    assert.equal(result.testFileSizePolicy, policy);
+    assert.deepEqual(
+      result.oversizedTestFiles.map(({ file, lineCount }) => ({
+        file: path.relative(repoRoot, file),
+        lineCount,
+      })),
+      [{ file: path.join('test', 'large.test.js'), lineCount: 3 }],
+    );
+  }
 });
 
 test('maintainability check requires a test limit when test size policy is enabled', async (t) => {
   const repoRoot = await createTempRepo(t);
   await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 10,
-      testFileSizePolicy: 'warn',
-    },
+    maintainabilityGuard: { testFileSizePolicy: 'warn' },
   });
-  await writeLines(path.join(repoRoot, 'src', 'index.js'), 1);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), 1);
 
   assert.throws(
     () => checkMaintainability({ repoRoot }),
@@ -277,15 +211,11 @@ test('maintainability check reports unused runtime exports with allowlist suppor
   const stderr = [];
   await writeConfig(repoRoot, {
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
       maxRuntimeFileLines: 20,
       unusedExportPolicy: 'warn',
       unusedExportRoots: ['src'],
       unusedExportConsumerRoots: ['src'],
-      unusedExportAllowlist: [
-        'src/source.js#allowed',
-      ],
+      unusedExportAllowlist: ['src/source.js#allowed'],
     },
   });
   await writeFile(path.join(repoRoot, 'src', 'source.js'), [
@@ -326,17 +256,13 @@ test('maintainability check can fail on unused runtime exports', async (t) => {
   const stderr = [];
   await writeConfig(repoRoot, {
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
       maxRuntimeFileLines: 20,
       unusedExportPolicy: 'fail',
       unusedExportRoots: ['src'],
       unusedExportConsumerRoots: ['src'],
     },
   });
-  await writeFile(path.join(repoRoot, 'src', 'index.js'), [
-    'export function unused() {}',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), ['export function unused() {}']);
 
   const result = checkMaintainability({
     repoRoot,
@@ -359,17 +285,13 @@ test('maintainability check counts test imports as runtime export consumers', as
   const repoRoot = await createTempRepo(t);
   await writeConfig(repoRoot, {
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
       maxRuntimeFileLines: 20,
       unusedExportPolicy: 'fail',
       unusedExportRoots: ['src'],
       unusedExportConsumerRoots: ['src', 'test'],
     },
   });
-  await writeFile(path.join(repoRoot, 'src', 'source.js'), [
-    'export function testOnlyConsumer() {}',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'source.js'), ['export function testOnlyConsumer() {}']);
   await writeFile(path.join(repoRoot, 'test', 'source.test.js'), [
     "import { testOnlyConsumer } from '../src/source.js';",
     'testOnlyConsumer();',
@@ -385,31 +307,16 @@ test('maintainability check fails src files missing check-js coverage', async (t
   const repoRoot = await createTempRepo(t);
   const stderr = [];
   await writeConfig(repoRoot, {
-    include: [
-      'src/checked.js',
-    ],
+    include: ['src/checked.js'],
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
       maxRuntimeFileLines: 20,
       typeCheckRoots: ['src'],
-      typeCheckAllowlist: [
-        'src/legacy.js',
-      ],
+      typeCheckAllowlist: ['src/legacy.js'],
     },
   });
-  await writeFile(path.join(repoRoot, 'src', 'checked.js'), [
-    'const checked = true;',
-    'void checked;',
-  ]);
-  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), [
-    'const legacy = true;',
-    'void legacy;',
-  ]);
-  await writeFile(path.join(repoRoot, 'src', 'new-file.js'), [
-    'const missed = true;',
-    'void missed;',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'checked.js'), ['const checked = true;', 'void checked;']);
+  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), ['const legacy = true;', 'void legacy;']);
+  await writeFile(path.join(repoRoot, 'src', 'new-file.js'), ['const missed = true;', 'void missed;']);
 
   const result = checkMaintainability({
     repoRoot,
@@ -426,14 +333,8 @@ test('maintainability check fails src files missing check-js coverage', async (t
 
 test('type-check coverage guard catches a new src file outside include and allowlist', async (t) => {
   const repoRoot = await createTempRepo(t);
-  await writeFile(path.join(repoRoot, 'src', 'checked.js'), [
-    'const checked = true;',
-    'void checked;',
-  ]);
-  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), [
-    'const legacy = true;',
-    'void legacy;',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'checked.js'), ['const checked = true;', 'void checked;']);
+  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), ['const legacy = true;', 'void legacy;']);
   await writeFile(path.join(repoRoot, 'src', 'new-runtime-file.js'), [
     'const uncovered = true;',
     'void uncovered;',
@@ -453,21 +354,14 @@ test('type-check coverage guard catches a new src file outside include and allow
 test('maintainability check accepts recursive src check-js coverage', async (t) => {
   const repoRoot = await createTempRepo(t);
   await writeConfig(repoRoot, {
-    include: [
-      'src/**/*.js',
-    ],
+    include: ['src/**/*.js'],
     maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
       maxRuntimeFileLines: 20,
       typeCheckRoots: ['src'],
       typeCheckAllowlist: [],
     },
   });
-  await writeFile(path.join(repoRoot, 'src', 'index.js'), [
-    'const index = true;',
-    'void index;',
-  ]);
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), ['const index = true;', 'void index;']);
   await writeFile(path.join(repoRoot, 'src', 'nested', 'module.js'), [
     'const nested = true;',
     'void nested;',
@@ -505,36 +399,21 @@ test('maintainability check rejects invalid type-check allowlist config', async 
   for (const { typeCheckAllowlist, expected } of cases) {
     await writeConfig(repoRoot, {
       maintainabilityGuard: {
-        runtimeRoots: ['src'],
-        excludedRoots: [],
         maxRuntimeFileLines: 20,
         typeCheckRoots: ['src'],
         typeCheckAllowlist,
       },
     });
-
-    assert.throws(
-      () => checkMaintainability({ repoRoot }),
-      expected,
-    );
+    assert.throws(() => checkMaintainability({ repoRoot }), expected);
   }
 });
 
 test('maintainability check fails broken package script policies', async (t) => {
   const repoRoot = await createTempRepo(t);
   const stderr = [];
-  await writeConfig(repoRoot, {
-    maintainabilityGuard: {
-      runtimeRoots: ['src'],
-      excludedRoots: [],
-      maxRuntimeFileLines: 20,
-    },
-  });
-  await writeFile(path.join(repoRoot, 'src', 'index.js'), [
-    'const ok = true;',
-    'void ok;',
-  ]);
-  await writePackageJson(repoRoot, {
+  await writeConfig(repoRoot, { maintainabilityGuard: { maxRuntimeFileLines: 20 } });
+  await writeFile(path.join(repoRoot, 'src', 'index.js'), ['const ok = true;', 'void ok;']);
+  await writeJson(path.join(repoRoot, 'package.json'), {
     scripts: {
       test: 'node --test "test/*.test.js"',
       coverage: 'node --test "test/**/*.test.js"',
@@ -580,34 +459,29 @@ test('package script validation accepts the compatibility coverage runner', () =
   }), []);
 });
 
-test('package script validation rejects missing coverage mode', () => {
-  assert.deepEqual(validatePackageScripts({
-    test: 'node --test "test/**/*.test.js"',
-    coverage: coverageScript({ coverageMode: false }),
-    validate: 'npm run coverage',
-  }), [
-    'package scripts.coverage must run node --test with recursive coverage reporting',
-  ]);
-});
+test('package script validation rejects coverage misconfigurations', () => {
+  const cases = [
+    {
+      coverage: coverageScript({ coverageMode: false }),
+      expected: ['package scripts.coverage must run node --test with recursive coverage reporting'],
+    },
+    {
+      coverage: coverageScript({ thresholds: false }),
+      expected: ['package scripts.coverage must enforce line, branch, and function coverage thresholds'],
+    },
+    {
+      coverage: coverageScript({ sourceInclude: false }),
+      expected: ['package scripts.coverage must include src/**/*.js in coverage reporting'],
+    },
+  ];
 
-test('package script validation rejects missing coverage threshold flags', () => {
-  assert.deepEqual(validatePackageScripts({
-    test: 'node --test "test/**/*.test.js"',
-    coverage: coverageScript({ thresholds: false }),
-    validate: 'npm run coverage',
-  }), [
-    'package scripts.coverage must enforce line, branch, and function coverage thresholds',
-  ]);
-});
-
-test('package script validation rejects missing source coverage include', () => {
-  assert.deepEqual(validatePackageScripts({
-    test: 'node --test "test/**/*.test.js"',
-    coverage: coverageScript({ sourceInclude: false }),
-    validate: 'npm run coverage',
-  }), [
-    'package scripts.coverage must include src/**/*.js in coverage reporting',
-  ]);
+  for (const { coverage, expected } of cases) {
+    assert.deepEqual(validatePackageScripts({
+      test: 'node --test "test/**/*.test.js"',
+      coverage,
+      validate: 'npm run coverage',
+    }), expected);
+  }
 });
 
 test('package script validation rejects misleading recursive-looking targets', () => {
@@ -644,39 +518,29 @@ async function createTempRepo(t) {
 }
 
 async function writeConfig(repoRoot, overrides = {}) {
-  const config = {
+  const { maintainabilityGuard, ...rest } = overrides;
+  await writeJson(path.join(repoRoot, 'jsconfig.json'), {
     compilerOptions: REQUIRED_COMPILER_OPTIONS,
     maintainabilityGuard: {
       runtimeRoots: ['src'],
       excludedRoots: [],
       maxRuntimeFileLines: 10,
+      ...maintainabilityGuard,
     },
-    ...overrides,
-  };
-  await fs.writeFile(
-    path.join(repoRoot, 'jsconfig.json'),
-    `${JSON.stringify(config, null, 2)}\n`,
-    'utf8',
-  );
+    ...rest,
+  });
 }
 
-async function writeLines(file, lineCount) {
+async function writeFile(file, content) {
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const lines = Array.from({ length: lineCount }, (_, index) => `line${index + 1}`);
+  const lines = typeof content === 'number'
+    ? Array.from({ length: content }, (_, index) => `line${index + 1}`)
+    : content;
   await fs.writeFile(file, `${lines.join('\n')}\n`, 'utf8');
 }
 
-async function writeFile(file, lines) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  await fs.writeFile(file, `${lines.join('\n')}\n`, 'utf8');
-}
-
-async function writePackageJson(repoRoot, packageJson) {
-  await fs.writeFile(
-    path.join(repoRoot, 'package.json'),
-    `${JSON.stringify(packageJson, null, 2)}\n`,
-    'utf8',
-  );
+async function writeJson(file, data) {
+  await fs.writeFile(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 }
 
 function coverageScript({

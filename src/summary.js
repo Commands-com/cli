@@ -5,6 +5,7 @@ import {
   VERDICT_VALUES,
 } from './summary-contract.js';
 
+/** @type {Set<string>} */
 const SUMMARY_FIELD_SET = new Set(SUMMARY_FIELD_NAMES);
 const SCORE_PATTERN = new RegExp(`^(${SCORE_ORDER.join('|')})\\b`, 'i');
 const SUMMARY_KEY_VALUE_PATTERN = /^([A-Za-z_][\w-]*):(?:[ \t]*(.*))?$/;

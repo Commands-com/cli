@@ -91,6 +91,30 @@ export function createRoomSynthesisArtifacts({ store, provider }) {
   });
 }
 
+/**
+ * @typedef {import('./provider-item-workflow.js').ProviderItemArtifacts & {
+ *   writeError: (text: string) => (void|Promise<void>),
+ * }} CycleSynthesisArtifacts
+ *
+ * @param {{
+ *   providerCall: {
+ *     provider: CycleProvider,
+ *     model?: string,
+ *     timeoutMs?: number,
+ *     providerRetries?: number,
+ *     cwd: string,
+ *   },
+ *   artifacts: CycleSynthesisArtifacts,
+ *   logging?: {
+ *     logger?: CycleLogger,
+ *     prefix?: string,
+ *     complete?: string,
+ *     deferFallbackLog?: boolean,
+ *   },
+ *   prompt: string,
+ *   fallbackDescription: string,
+ * }} args
+ */
 export async function runProviderSynthesisWithFallback({
   providerCall,
   artifacts,

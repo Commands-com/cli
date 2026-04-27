@@ -23,6 +23,15 @@ export async function runProviderWithRetry(provider, options = {}) {
   return runProviderWithRetryPolicy(provider, options, runProvider);
 }
 
+/**
+ * @typedef {import('./provider-invocation.js').RunProviderOptions} RunProviderOptions
+ * @typedef {Error & { code?: string }} ProviderTimeoutError
+ */
+
+/**
+ * @param {{id: string, command?: string}} provider
+ * @param {RunProviderOptions} [options]
+ */
 export async function runProvider(provider, options = {}) {
   const adapter = getProviderAdapter(provider.id);
   if (adapterRunsDirectly(adapter)) return adapter.run(provider, options);
@@ -47,6 +56,7 @@ export async function runProvider(provider, options = {}) {
     throw result.error;
   }
   if (result.timedOut) {
+    /** @type {ProviderTimeoutError} */
     const timeoutError = new Error(`${provider.id} timed out after ${timeoutMs}ms (ETIMEDOUT)`);
     timeoutError.code = 'ETIMEDOUT';
     throw timeoutError;

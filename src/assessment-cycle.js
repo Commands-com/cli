@@ -29,23 +29,186 @@ import { writeRunState } from './run-state.js';
 /**
  * @typedef {import('./cycle-state.js').CycleState} CycleState
  * @typedef {import('./cycle-state.js').CycleRunContext} CycleRunContext
+ * @typedef {import('./cycle-state.js').CycleRepoContext} CycleRepoContext
+ * @typedef {import('./cycle-state.js').CycleRecord} CycleRecord
+ * @typedef {import('./cycle-state.js').CycleStore} CycleStore
+ * @typedef {import('./cycle-fanout.js').AssessmentFanoutFailure} AssessmentCycleFanoutFailure
+ * @typedef {import('./cycle-fanout.js').AssessmentFanoutItemDescriptor} AssessmentFanoutItemDescriptor
+ */
+
+/**
+ * Provider-tagged output produced by the inner adapter's `buildOutput` hook.
+ * Adapters extend this with provider-specific fields (review reviewers carry
+ * `role`, quality outputs carry `area`/`areas`).
+ *
+ * @typedef {object} AssessmentCycleProviderOutput
+ * @property {string} provider Provider id that produced this output.
+ * @property {string} text Raw provider text.
+ * @property {string} [score] Parsed score, when present.
+ * @property {number} [issueCount] Parsed issue count, when present.
+ * @property {string} [synopsis] Parsed synopsis, when present.
+ */
+
+/**
+ * Aggregate cycle summary produced by the adapter's output and synthesis
+ * summarizers. Both ultimately shape the cycle record.
+ *
+ * @typedef {object} AssessmentCycleSummary
+ * @property {string} [score] Latest cycle score.
+ * @property {number} [issueCount] Aggregate issue count.
+ * @property {string} [synopsis] One-line cycle synopsis.
+ * @property {number} [reviewerIssueCount] Pre-synthesis reviewer aggregate (review only).
+ * @property {number} [providerIssueCount] Pre-synthesis provider aggregate (quality only).
+ */
+
+/**
+ * Inner adapter consumed by `runAssessmentProviderFanout`. The args bag varies
+ * by hook (`buildPrompt` sees prompt args, `buildOutput` adds the provider
+ * `result`/`text`, `logOutput`/`writeAdditionalArtifacts` add the rendered
+ * `output` and persisted `artifact`).
+ *
+ * @typedef {object} AssessmentFanoutInnerAdapter
+ * @property {string} [artifactRoot] Artifact root segment for this fan-out.
+ * @property {(args: AssessmentFanoutPromptArgs) => string} buildPrompt Provider prompt builder.
+ * @property {(args: AssessmentFanoutResultArgs) => AssessmentCycleProviderOutput} buildOutput Output builder.
+ * @property {(args: AssessmentFanoutOutputArgs) => void} [logOutput] Optional output logger.
+ * @property {(args: AssessmentFanoutOutputArgs) => (void|Promise<void>)} [writeAdditionalArtifacts] Optional extra artifact writer.
+ */
+
+/**
+ * Args passed to the inner adapter's `buildPrompt` hook by `cycle-fanout.js`.
+ *
+ * @typedef {object} AssessmentFanoutPromptArgs
+ * @property {{ id: string, command?: string }} provider Provider descriptor.
+ * @property {unknown} item Item value (kind-specific: reviewer role, quality areas, ...).
+ * @property {AssessmentFanoutItemDescriptor} itemDescriptor Normalized item descriptor.
+ * @property {number} itemIndex Zero-based item index within the fan-out.
+ * @property {CycleRepoContext} context Repository context for prompt rendering.
+ * @property {number} cycle One-based cycle number.
+ */
+
+/**
+ * Args passed to `buildOutput` — `buildPrompt` args plus the provider result.
+ *
+ * @typedef {AssessmentFanoutPromptArgs & {
+ *   result: { text?: string },
+ *   text: string,
+ * }} AssessmentFanoutResultArgs
+ */
+
+/**
+ * Args passed to `logOutput` / `writeAdditionalArtifacts` — `buildOutput` args
+ * plus the rendered output and persisted artifact metadata.
+ *
+ * @typedef {AssessmentFanoutResultArgs & {
+ *   output: AssessmentCycleProviderOutput,
+ *   artifact: { promptPath: string, outputPath: string, path: string },
+ * }} AssessmentFanoutOutputArgs
+ */
+
+/**
+ * Options returned by `adapter.fanout` and spread into
+ * `runAssessmentProviderFanout`.
+ *
+ * @typedef {object} AssessmentCycleFanoutOptions
+ * @property {Array<unknown>} items Fan-out items.
+ * @property {string} label Human-readable fan-out label.
+ * @property {boolean} [partial] Whether per-job failures should surface in `failures`.
+ * @property {AssessmentFanoutInnerAdapter} adapter Inner adapter consumed by `runAssessmentProviderFanout`.
+ */
+
+/**
+ * Implementation handoff returned by `adapter.implementation`. The optional
+ * `testFailureUpdates` lets adapters bias the cycle record when validation
+ * fails (quality flips score to F).
+ *
+ * @typedef {object} AssessmentCycleImplementationHandoff
+ * @property {string} objective Objective passed to the implementation planner.
+ * @property {Partial<CycleRecord>} [testFailureUpdates] Cycle record overrides applied on a failing test run.
  */
 
 /**
  * Fresh per-cycle context shared with assessment adapter hooks.
  *
- * @typedef {Object} AssessmentCycleContext
+ * @typedef {object} AssessmentCycleContext
  * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
  * @property {number} cycle One-based cycle number.
- * @property {Object} context Same repository context object as `runContext.context`.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
  */
 
 /**
- * Contract implemented by review/quality assessment cycle adapters. Adapter
- * construction validates the runtime shape; hook arguments include
- * `AssessmentCycleContext` plus hook-specific fields.
+ * Cycle context with raw provider outputs added (after fan-out).
  *
- * @typedef {Object} AssessmentCycleAdapter
+ * @typedef {AssessmentCycleContext & { outputs: Array<AssessmentCycleProviderOutput> }} AssessmentCycleOutputsContext
+ */
+
+/**
+ * Cycle context with the synthesis text added (after synthesis).
+ *
+ * @typedef {AssessmentCycleOutputsContext & {
+ *   outputSummary: AssessmentCycleSummary,
+ *   synthesisText: string,
+ * }} AssessmentCycleSynthesisContext
+ */
+
+/**
+ * Cycle context handed to `buildCycleRecord` once synthesis has run.
+ *
+ * @typedef {AssessmentCycleSynthesisContext & {
+ *   cycleSummary: AssessmentCycleSummary,
+ *   synthesisProvider: string,
+ *   synthesisError: string,
+ * }} AssessmentCycleRecordContext
+ */
+
+/**
+ * Cycle context handed to post-record hooks (`hasFixableIssues`,
+ * `implementation`).
+ *
+ * @typedef {AssessmentCycleContext & { cycleRecord: CycleRecord }} AssessmentCycleAfterContext
+ */
+
+/**
+ * Full cycle context handed to the optional `afterCycle` hook.
+ *
+ * @typedef {AssessmentCycleAfterContext & {
+ *   outputs: Array<AssessmentCycleProviderOutput>,
+ *   outputSummary: AssessmentCycleSummary,
+ *   cycleSummary: AssessmentCycleSummary,
+ *   synthesisProvider: string,
+ *   synthesisText: string,
+ *   synthesisError: string,
+ * }} AssessmentCycleAfterCycleContext
+ */
+
+/**
+ * Contract implemented by review/quality assessment cycle adapters. Adapters
+ * may attach extra fields to the cycle record (`reviewers`, `outputs`, etc.);
+ * `buildCycleRecord` is typed loosely enough to allow that.
+ *
+ * @typedef {object} AssessmentCycleAdapter
+ * @property {string} findingsTitle Section title used when formatting prior findings.
+ * @property {string} synthesisFallbackDescription Description logged when synthesis falls back.
+ * @property {(context: AssessmentCycleContext) => void} [logCycleStart] Optional pre-fanout log hook.
+ * @property {(context: AssessmentCycleContext) => AssessmentCycleFanoutOptions} fanout Provider fan-out options.
+ * @property {(context: AssessmentCycleOutputsContext) => AssessmentCycleSummary} summarizeOutputs Summarize raw provider outputs.
+ * @property {(context: AssessmentCycleSynthesisContext) => AssessmentCycleSummary} summarizeSynthesis Summarize synthesis text.
+ * @property {(context: AssessmentCycleOutputsContext) => string} buildSynthesisPrompt Build the synthesis prompt.
+ * @property {(context: AssessmentCycleRecordContext) => Partial<CycleRecord>} buildCycleRecord Build cycle record extras.
+ * @property {(outputs: Array<AssessmentCycleProviderOutput>) => string} formatOutputs Render outputs for prior findings.
+ * @property {(context: AssessmentCycleAfterContext) => boolean} hasFixableIssues Decide whether implementation should run.
+ * @property {(context: AssessmentCycleAfterCycleContext) => (void|Promise<void>)} [afterCycle] Optional post-record hook.
+ * @property {(context: AssessmentCycleAfterContext) => AssessmentCycleImplementationHandoff} implementation Implementation handoff builder.
+ */
+
+/**
+ * Args bag passed to `writeCycleFanoutFailureArtifact`.
+ *
+ * @typedef {object} CycleFanoutFailureArtifactArgs
+ * @property {CycleStore} store Artifact store.
+ * @property {number} cycle One-based cycle number.
+ * @property {{ artifactRoot: string, providerFile: string, itemFile: string }} artifact Artifact descriptor.
+ * @property {unknown} error Captured failure.
  */
 
 /**
@@ -150,6 +313,11 @@ export async function runAssessmentCycles(state, adapter) {
   }
 }
 
+/**
+ * @param {CycleState} state
+ * @param {number} cycle
+ * @returns {AssessmentCycleContext}
+ */
 function createAssessmentCycleContext(state, cycle) {
   const runContext = createCycleRunContext(state);
   return {
@@ -159,6 +327,10 @@ function createAssessmentCycleContext(state, cycle) {
   };
 }
 
+/**
+ * @param {CycleFanoutFailureArtifactArgs} args
+ * @returns {Promise<string>}
+ */
 async function writeCycleFanoutFailureArtifact({ store, cycle, artifact, error }) {
   const errorPath = cycleMarkdownArtifactPath(
     cycle,
@@ -170,6 +342,12 @@ async function writeCycleFanoutFailureArtifact({ store, cycle, artifact, error }
   return errorPath;
 }
 
+/**
+ * @template T
+ * @param {((args: T) => (void|Promise<void>)) | undefined} fn
+ * @param {T} args
+ * @returns {Promise<void>}
+ */
 async function callOptional(fn, args) {
   if (typeof fn === 'function') {
     await fn(args);

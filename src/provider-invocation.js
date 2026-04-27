@@ -1,5 +1,22 @@
 import { getProviderAdapter as getAdapterMetadata } from './provider-adapters.js';
 
+/**
+ * Options consumed by `buildProviderInvocation` and `runProvider`.
+ *
+ * Callers pass a single bag of options that flows into invocation building,
+ * limit resolution, and the spawn layer. All fields are optional: each
+ * consumer reads only what it needs.
+ *
+ * @typedef {object} RunProviderOptions
+ * @property {string} [prompt] Stdin text passed to the provider CLI.
+ * @property {string} [model] Provider model identifier.
+ * @property {boolean} [allowTools] Whether the invocation may use tool/write-capable mode.
+ * @property {string} [resumeSessionId] Provider session id to resume.
+ * @property {string} [cwd] Working directory for the spawned process.
+ * @property {number} [timeoutMs] Provider invocation timeout in milliseconds.
+ * @property {number} [maxOutputBytes] Captured stdout/stderr cap in bytes.
+ */
+
 function normalizedResumeSessionId(value) {
   return String(value || '').trim();
 }
@@ -62,6 +79,10 @@ function assertSafeModel(model) {
   }
 }
 
+/**
+ * @param {{id: string, command?: string}} provider
+ * @param {RunProviderOptions} options
+ */
 export function buildProviderInvocation(provider, { prompt, model, allowTools, resumeSessionId = '' }) {
   assertSafeModel(model);
   const adapter = getAdapterMetadata(provider.id);

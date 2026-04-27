@@ -34,6 +34,10 @@ import {
 } from './task-worktrees.js';
 
 class ImplementationTaskAttemptError extends Error {
+  /**
+   * @param {unknown} error
+   * @param {{ workspace?: { cwd?: string, worktree?: any, baseline?: any } }} [options]
+   */
   constructor(error, { workspace } = {}) {
     super(formatFailureMessage(error), { cause: error });
     this.name = 'ImplementationTaskAttemptError';
@@ -181,11 +185,13 @@ async function invokeImplementationTaskProvider(taskRunContext, {
         execution: { allowTools: true },
         retry: { retries: 0 },
         artifactPolicy: {
-          writeFailure: ({ error }) => writeTaskErrorArtifacts(
-            store,
-            [artifacts.attempts(attempt, 'error')],
-            error,
-          ),
+          writeFailure: async ({ error }) => {
+            await writeTaskErrorArtifacts(
+              store,
+              [artifacts.attempts(attempt, 'error')],
+              error,
+            );
+          },
         },
       });
       return { workspace, ...providerResult };

@@ -13,10 +13,86 @@ import { UsageError } from './errors.js';
 
 export const RUN_ID_PATTERN = /^\d{8}-\d{6}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-[a-f0-9]{6}$/;
 
+/**
+ * Free-form metadata persisted next to a run. Adapter callers attach
+ * provider/options details (objective, reviewers, areas, providers, model,
+ * ...). The dict is typed as open-ended `any` because contents vary by
+ * adapter and are read defensively at consumer callsites.
+ *
+ * @typedef {Record<string, any>} RunMetadata
+ */
+
+/**
+ * Result returned by `readRunMetadata` — like `RunJsonResult` but with the
+ * value statically narrowed to `RunMetadata` so callers can read provider
+ * and option fields without an explicit cast.
+ *
+ * @typedef {{ dir: string, runId: string, value: RunMetadata }} RunMetadataResult
+ */
+
+/**
+ * Artifact store backing a single run. `write` resolves filesystem-safe paths
+ * inside the run directory and returns the absolute path written to.
+ *
+ * @typedef {Object} RunStore
+ * @property {string} runId Run identifier (also the directory basename).
+ * @property {string} dir Absolute directory containing run artifacts.
+ * @property {(name: string, content: string) => Promise<string>} write Write a UTF-8 file inside the run directory.
+ * @property {(name: string, value: unknown) => Promise<string>} writeJson JSON-encode and write a file inside the run directory.
+ */
+
+/**
+ * Result returned by `readRunJson` — the resolved run directory plus the
+ * parsed JSON value at `fileName`.
+ *
+ * @typedef {Object} RunJsonResult
+ * @property {string} dir Absolute run directory.
+ * @property {string} runId Basename of the run directory.
+ * @property {unknown} value Parsed JSON contents.
+ */
+
+/**
+ * Symmetric metadata shape returned by `readRunMetadataStatus`. `metadata` is
+ * `null` only when metadata.json is absent or unparseable.
+ *
+ * @typedef {Object} RunMetadataStatus
+ * @property {RunMetadata | null} metadata Parsed metadata when readable.
+ * @property {string | null} metadataError Human-readable read/parse error.
+ */
+
+/**
+ * Row entry produced by `readRunRows` — one record per run directory.
+ *
+ * @typedef {Object} RunRow
+ * @property {string} runId Run identifier.
+ * @property {string} dir Absolute run directory path.
+ * @property {RunMetadata | null} metadata Parsed metadata when readable.
+ * @property {string | null} metadataError Human-readable read/parse error.
+ * @property {number} mtimeMs Last-modified time in ms (used as an order tiebreaker).
+ */
+
+/**
+ * Result returned by `prepareRun`.
+ *
+ * @typedef {Object} PreparedRun
+ * @property {RunStore} store Artifact store for this run.
+ * @property {import('./git.js').RepoContext} context Repository context captured at run start.
+ */
+
+/**
+ * @param {string} cwd
+ * @returns {string}
+ */
 export function runStoreRoot(cwd) {
   return localRunsPath(cwd);
 }
 
+/**
+ * @param {string} cwd
+ * @param {string} kind
+ * @param {string} label
+ * @returns {Promise<RunStore>}
+ */
 async function createRunStore(cwd, kind, label) {
   const runId = `${timestamp()}-${kind}-${slug(label)}-${randomBytes(3).toString('hex')}`;
   const dir = path.join(runStoreRoot(cwd), runId);
@@ -25,6 +101,11 @@ async function createRunStore(cwd, kind, label) {
   return openRunStore(dir, runId);
 }
 
+/**
+ * @param {string} dir
+ * @param {string} [runId]
+ * @returns {RunStore}
+ */
 export function openRunStore(dir, runId = path.basename(dir)) {
   return {
     runId,
@@ -48,6 +129,12 @@ export function openRunStore(dir, runId = path.basename(dir)) {
   };
 }
 
+/**
+ * @param {string} cwd
+ * @param {string} runRef
+ * @param {string} fileName
+ * @returns {Promise<RunJsonResult>}
+ */
 export async function readRunJson(cwd, runRef, fileName) {
   const dir = await resolveRunDir(cwd, runRef);
   const filePath = path.join(dir, fileName);
@@ -68,10 +155,20 @@ export async function readRunJson(cwd, runRef, fileName) {
   }
 }
 
+/**
+ * @param {string} cwd
+ * @param {string} runRef
+ * @returns {Promise<RunMetadataResult>}
+ */
 export async function readRunMetadata(cwd, runRef) {
-  return readRunJson(cwd, runRef, 'metadata.json');
+  return /** @type {Promise<RunMetadataResult>} */ (readRunJson(cwd, runRef, 'metadata.json'));
 }
 
+/**
+ * @param {string} cwd
+ * @param {string} runRef
+ * @returns {Promise<string>}
+ */
 export async function resolveRunDir(cwd, runRef) {
   const ref = String(runRef || '').trim();
   if (!ref) {
@@ -108,6 +205,10 @@ function describeMetadataError(error) {
 // Symmetric metadata read used by listRuns, showRun, and the shared run-row reader.
 // metadata is null when metadata.json is absent (ENOENT) and metadataError stays null.
 // metadataError is set only when metadata.json exists but cannot be read or parsed.
+/**
+ * @param {string} dir
+ * @returns {Promise<RunMetadataStatus>}
+ */
 export async function readRunMetadataStatus(dir) {
   try {
     const text = await fs.readFile(path.join(dir, 'metadata.json'), 'utf8');
@@ -150,6 +251,10 @@ function compareRunRows(a, b) {
   return b.runId.localeCompare(a.runId);
 }
 
+/**
+ * @param {string} cwd
+ * @returns {Promise<Array<RunRow>>}
+ */
 export async function readRunRows(cwd) {
   let entries = [];
   try {
@@ -184,6 +289,17 @@ async function assertRunDirectory(dir, displayRef) {
   throw new UsageError(`run not found: ${displayRef}`);
 }
 
+/**
+ * @param {string} cwd
+ * @param {{
+ *   kind?: string,
+ *   label?: string,
+ *   changed?: boolean,
+ *   metadata?: RunMetadata,
+ *   writeSetupArtifacts?: boolean,
+ * }} [options]
+ * @returns {Promise<PreparedRun>}
+ */
 export async function prepareRun(cwd, {
   kind,
   label,
@@ -199,6 +315,12 @@ export async function prepareRun(cwd, {
   return { store, context };
 }
 
+/**
+ * @param {RunStore} store
+ * @param {import('./git.js').RepoContext} context
+ * @param {RunMetadata} [metadata]
+ * @returns {Promise<void>}
+ */
 export async function writeRunSetupArtifacts(store, context, metadata = {}) {
   await store.write(markdownArtifactPath('context'), formatRepoContext(context));
   await store.writeJson(artifactPath('metadata.json'), {
