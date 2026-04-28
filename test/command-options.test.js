@@ -10,6 +10,7 @@ import {
   positiveIntegerOption,
   readCommandOptionValue,
   stringOption,
+  validateFlagsForCommand,
 } from '../src/command-options.js';
 import { isUsageError } from './support/assertions.js';
 
@@ -64,6 +65,24 @@ test('readCommandOptionValue treats the literal string "true" as a real value, n
     readCommandOptionValue(new Map([['model', 'true']]), 'model', 'fallback'),
     'true',
   );
+});
+
+test('validateFlagsForCommand rejects string-option flags with no value', () => {
+  for (const [command, flag] of [['review', 'provider'], ['review', 'model'], ['review', 'cwd']]) {
+    const parsed = parseArgs(['node', 'cli', command, `--${flag}`, '--json']);
+    assert.equal(parsed.flags.get(flag), true, `expected --${flag} to capture missing-value sentinel`);
+    assert.throws(
+      () => validateFlagsForCommand(command, parsed.flags),
+      (error) => isUsageError(error, `--${flag} requires a value`),
+      `expected --${flag} missing-value to be rejected`,
+    );
+  }
+});
+
+test('validateFlagsForCommand allows --test as a missing-value sentinel', () => {
+  const parsed = parseArgs(['node', 'cli', 'review', '--test', '--json']);
+  assert.equal(parsed.flags.get('test'), true);
+  assert.doesNotThrow(() => validateFlagsForCommand('review', parsed.flags));
 });
 
 test('readCommandOptionValue treats boolean true as the missing-value sentinel', () => {

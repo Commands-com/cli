@@ -4,7 +4,6 @@ import {
   runAssessmentProviderFanout,
 } from '../src/cycle-fanout.js';
 import {
-  cycleProviderItemArtifactDescriptor,
   providerItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
 import { cycleArtifactOptions } from './support/cycle-artifact-fixtures.js';
@@ -232,7 +231,7 @@ test('runAssessmentProviderFanout uses explicit cycle artifact defaults', async 
 
   assert.equal(outputs.length, 1);
   assert.deepEqual(additionalArtifacts, [
-    cycleProviderItemArtifactDescriptor({
+    providerItemArtifactDescriptor({
       cycle: 5,
       artifactRoot: 'areas',
       provider: { id: 'mock' },
@@ -253,7 +252,7 @@ test('runAssessmentProviderFanout ignores legacy option-level artifact paths wit
 
   const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 4,
-    artifactPaths: cycleProviderItemArtifactDescriptor,
+    artifactPaths: providerItemArtifactDescriptor,
     items: [{ value: 'stability', label: 'stability', pathSegment: 'stability' }],
     label: 'generic fan-out',
     adapter: {

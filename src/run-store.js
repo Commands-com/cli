@@ -178,6 +178,9 @@ export async function resolveRunDir(cwd, runRef) {
   }
   if (ref === 'latest') return latestRunDir(cwd);
 
+  // Path-mode is intentionally unconstrained: --resume may point at a run dir
+  // that has been moved outside runStoreRoot(cwd). assertRunDirectory below
+  // validates the target is an actual run directory.
   if (ref.includes('/') || ref.includes('\\')) {
     const dir = path.resolve(cwd, ref);
     await assertRunDirectory(dir, ref);

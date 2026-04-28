@@ -27,8 +27,8 @@ import {
 } from './provider-item-workflow.js';
 import { providerFallbackChain, runWithProviderFallback } from './provider-fallback.js';
 
-/** @type {{ info(message?: string): void }} */
-const SILENT_LOGGER = Object.freeze({ info() {} });
+/** @type {{ info(message?: string): void, warn(message?: string): void }} */
+const SILENT_LOGGER = Object.freeze({ info() {}, warn() {} });
 
 const IMPLEMENTATION_EXECUTION_MODES = Object.freeze({
   PARALLEL_WORKTREES: 'parallel-worktrees',

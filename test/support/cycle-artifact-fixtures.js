@@ -1,9 +1,9 @@
-import { cycleProviderItemArtifactDescriptor } from '../../src/artifact-paths.js';
+import { providerItemArtifactDescriptor } from '../../src/artifact-paths.js';
 
 export function cycleArtifactOptions() {
   return {
     internal: {
-      artifactPaths: cycleProviderItemArtifactDescriptor,
+      artifactPaths: providerItemArtifactDescriptor,
     },
   };
 }

@@ -44,10 +44,14 @@ function parseCodexJsonl(stdout) {
   const progressMessages = [];
   let sessionId = '';
   let turnResult = '';
+  let parseErrorCount = 0;
 
-  if (!raw) return { raw, assistantMessages, errors, progressMessages, sessionId, turnResult };
+  if (!raw) {
+    return { raw, assistantMessages, errors, progressMessages, sessionId, turnResult, parseErrorCount };
+  }
 
   for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
     try {
       const event = JSON.parse(line);
       if (!isObjectRecord(event)) continue;
@@ -73,11 +77,11 @@ function parseCodexJsonl(stdout) {
         progressMessages.push(message);
       }
     } catch {
-      // Ignore non-JSON logs and truncated JSONL fragments.
+      parseErrorCount += 1;
     }
   }
 
-  return { raw, assistantMessages, errors, progressMessages, sessionId, turnResult };
+  return { raw, assistantMessages, errors, progressMessages, sessionId, turnResult, parseErrorCount };
 }
 
 export function extractCodexJsonlText(stdout) {
@@ -98,6 +102,9 @@ export function codexJsonlStdoutDiagnostics(stdout, maxChars) {
       : '',
     parsed.assistantMessages.length
       ? `stdout last message: ${parsed.assistantMessages.at(-1).slice(0, maxChars)}`
+      : '',
+    parsed.parseErrorCount > 0
+      ? `stdout parse errors: ${parsed.parseErrorCount} line(s)`
       : '',
   ].filter(Boolean);
 }

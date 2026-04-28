@@ -134,6 +134,8 @@ Commands.com refuses to edit a dirty current worktree unless you pass
 commands-com quality --until A --worktree --test "npm test"
 ```
 
+The `--test` command runs through your shell with your environment, so shell metacharacters in its value are interpreted by the shell.
+
 Fix loops also write `preflight.json`, `run-state.json`, `final-summary.json`,
 and `final-report.md` so failed or interrupted runs are understandable.
 

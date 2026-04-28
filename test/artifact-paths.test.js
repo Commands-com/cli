@@ -7,7 +7,6 @@ import {
   cycleArtifactPath,
   cycleMarkdownArtifactPath,
   cyclePromptArtifactPath,
-  cycleProviderItemArtifactDescriptor,
   markdownArtifactPath,
   promptArtifactPath,
   providerItemArtifactDescriptor,
@@ -123,7 +122,7 @@ test('cycle artifact paths normalize numeric cycle identifiers', () => {
 });
 
 test('review artifact paths normalize provider and reviewer segments', () => {
-  const paths = cycleProviderItemArtifactDescriptor({
+  const paths = providerItemArtifactDescriptor({
     cycle: '01',
     artifactRoot: 'reviewers',
     provider: 'Mock Provider/CLI',
@@ -135,7 +134,7 @@ test('review artifact paths normalize provider and reviewer segments', () => {
 });
 
 test('quality artifact paths normalize area output paths', () => {
-  const paths = cycleProviderItemArtifactDescriptor({
+  const paths = providerItemArtifactDescriptor({
     cycle: 2,
     artifactRoot: 'areas',
     provider: 'Gemini CLI.v2',
@@ -148,7 +147,7 @@ test('quality artifact paths normalize area output paths', () => {
 
 test('provider item artifact helpers sanitize descriptor objects with semantic fallbacks', () => {
   assert.deepEqual(
-    cycleProviderItemArtifactDescriptor({
+    providerItemArtifactDescriptor({
       cycle: '007',
       artifactRoot: '../Review Outputs',
       provider: { id: '../Codex.Provider/CLI!' },

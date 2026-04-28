@@ -1,6 +1,6 @@
 import {
   cycleMarkdownArtifactPath,
-  cycleProviderItemArtifactDescriptor,
+  providerItemArtifactDescriptor,
 } from './artifact-paths.js';
 import {
   createCycleRecorder,
@@ -142,7 +142,7 @@ export async function runAssessmentCycles(state, adapter) {
       cycle,
       ...fanoutOptions,
       internal: {
-        artifactPaths: cycleProviderItemArtifactDescriptor,
+        artifactPaths: providerItemArtifactDescriptor,
         writeFailureArtifact: writeCycleFanoutFailureArtifact,
       },
     });

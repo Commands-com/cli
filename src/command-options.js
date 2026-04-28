@@ -161,7 +161,8 @@ function allowedFlagNamesForCommand(command) {
 }
 
 export function validateFlagsForCommand(command, flags) {
-  const flagNames = [...normalizeFlags(flags).keys()];
+  const normalizedFlags = normalizeFlags(flags);
+  const flagNames = [...normalizedFlags.keys()];
   const isKnown = KNOWN_COMMAND_SET.has(command);
   const allowed = allowedFlagNamesForCommand(command);
 
@@ -175,6 +176,15 @@ export function validateFlagsForCommand(command, flags) {
     if (isKnown && !allowed.has(flag)) {
       const displayCommand = HELP_COMMAND_SET.has(command) ? 'help' : command;
       throw new UsageError(`--${flag} is not valid for ${displayCommand} command`);
+    }
+    const option = optionForFlagName(flag);
+    if (
+      option
+      && option.readWith === 'stringOption'
+      && !option.allowMissingValue
+      && normalizedFlags.get(flag) === true
+    ) {
+      throw new UsageError(`--${flag} requires a value`);
     }
   }
 }

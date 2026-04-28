@@ -288,6 +288,9 @@ export const COMMAND_OPTIONS = Object.freeze([
     scopes: CYCLE_COMMANDS,
     resumeOverrideFields: Object.freeze(['testCommand']),
     resolve: cycleField('testCommand', '', CYCLE_COMMAND),
+    // cycle-preflight runs its own validation and may treat the bare flag as
+    // opt-in for a configured default, so missing-value is intentional here.
+    allowMissingValue: true,
   },
   {
     name: 'timeout-ms',

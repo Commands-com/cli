@@ -42,6 +42,7 @@ export async function applyImplementationPartialMergePolicy({
   successes,
   useTaskWorktrees,
 }) {
+  const { logger } = implementationTaskExecution(taskRunContext);
   const merged = [];
   const failures = [];
   let processed = 0;
@@ -56,7 +57,10 @@ export async function applyImplementationPartialMergePolicy({
   }
   if (failures.length && useTaskWorktrees) {
     for (const result of successes.slice(processed)) {
-      await removeTaskWorktree(result.worktree).catch(() => {});
+      const removed = await removeTaskWorktree(result.worktree);
+      if (!removed.ok) {
+        logger.warn?.(`failed to clean up task worktree ${result.worktree?.path || ''}: ${removed.error || 'unknown error'}`);
+      }
     }
   }
   return { merged, failures };

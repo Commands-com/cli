@@ -10,7 +10,8 @@ import { formatFailureMessage } from './errors.js';
 import { runFanout } from './fanout.js';
 import { safePathSegment } from './safe-path.js';
 
-const DEFAULT_ASSESSMENT_FANOUT_ARTIFACT_PATHS = providerItemArtifactDescriptor;
+// Default strips `cycle` so non-cycle callers (e.g. rooms) get cycle-less artifact paths even when options carry a cycle field.
+const DEFAULT_ASSESSMENT_FANOUT_ARTIFACT_PATHS = (args) => providerItemArtifactDescriptor({ ...args, cycle: undefined });
 
 /**
  * @typedef {{value: *, label?: string, pathSegment?: string}} AssessmentFanoutItemDescriptor
@@ -18,20 +19,24 @@ const DEFAULT_ASSESSMENT_FANOUT_ARTIFACT_PATHS = providerItemArtifactDescriptor;
  * @typedef {{outputs: Array<Object>, failures: Array<AssessmentFanoutFailure>, partial?: true}} AssessmentFanoutResult
  */
 
-function normalizeAssessmentFanoutItem({ item, itemIndex }) {
+function toAssessmentFanoutItem(item, itemIndex, options = {}) {
   const isDescriptor = isAssessmentFanoutItemDescriptor(item);
-  const hasValue = isDescriptor && Object.prototype.hasOwnProperty.call(item, 'value');
-  const value = hasValue ? item.value : item;
-  const label = isDescriptor && item.label !== undefined ? String(item.label) : String(value);
+  const {
+    getValue = ({ item: rawItem }) => rawItem,
+    getLabel = ({ value }) => String(value),
+    getPathSegment,
+    pathFallback = 'item',
+  } = options;
+  const value = isDescriptor ? item.value : getValue({ item, itemIndex });
+  const label = isDescriptor && item.label !== undefined
+    ? String(item.label)
+    : String(getLabel({ item, value, itemIndex }));
   const pathSegment = isDescriptor && item.pathSegment
     ? String(item.pathSegment)
-    : safePathSegment(label, 'item');
-  return {
-    value,
-    label,
-    pathSegment,
-    itemIndex,
-  };
+    : (typeof getPathSegment === 'function'
+      ? String(getPathSegment({ item, value, label, itemIndex }))
+      : safePathSegment(label, pathFallback));
+  return { value, label, pathSegment, itemIndex };
 }
 
 /**
@@ -45,22 +50,13 @@ function normalizeAssessmentFanoutItem({ item, itemIndex }) {
  * @param {string} [options.pathFallback] Fallback segment for empty labels.
  * @returns {Array<AssessmentFanoutItemDescriptor>}
  */
-export function createAssessmentFanoutItems(items, {
-  getValue = ({ item }) => item,
-  getLabel = ({ value }) => String(value),
-  getPathSegment,
-  pathFallback = 'item',
-} = {}) {
+export function createAssessmentFanoutItems(items, options = {}) {
   if (!Array.isArray(items)) {
     throw new Error('createAssessmentFanoutItems requires items');
   }
 
   return items.map((item, itemIndex) => {
-    const value = getValue({ item, itemIndex });
-    const label = String(getLabel({ item, value, itemIndex }));
-    const pathSegment = typeof getPathSegment === 'function'
-      ? String(getPathSegment({ item, value, label, itemIndex }))
-      : safePathSegment(label, pathFallback);
+    const { value, label, pathSegment } = toAssessmentFanoutItem(item, itemIndex, options);
     return { value, label, pathSegment };
   });
 }
@@ -68,7 +64,7 @@ export function createAssessmentFanoutItems(items, {
 function buildAssessmentFanoutJobs({ providers, items }) {
   return providers.flatMap((provider) => items.map((item, itemIndex) => ({
     provider,
-    item: normalizeAssessmentFanoutItem({ item, itemIndex }),
+    item: toAssessmentFanoutItem(item, itemIndex),
   })));
 }
 

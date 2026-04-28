@@ -4,7 +4,7 @@ import {
   runAssessmentProviderFanout,
 } from '../src/cycle-fanout.js';
 import {
-  cycleProviderItemArtifactDescriptor,
+  providerItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
 import {
   createCycleRecorder,
@@ -133,7 +133,7 @@ test('runAssessmentProviderFanout reads provider settings from state.options for
   const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 2,
     internal: {
-      artifactPaths: cycleProviderItemArtifactDescriptor,
+      artifactPaths: providerItemArtifactDescriptor,
     },
     items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
     label: 'state-options-contract',

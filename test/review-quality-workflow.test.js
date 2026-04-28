@@ -6,7 +6,7 @@ import {
   runAssessmentProviderFanout,
 } from '../src/cycle-fanout.js';
 import {
-  cycleProviderItemArtifactDescriptor,
+  providerItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
 import {
   createCycleRecorder,
@@ -102,7 +102,7 @@ test('runAssessmentProviderFanout writes descriptor-based prompt and artifact pa
     const { outputs } = await runAssessmentProviderFanout(state, {
       cycle: 1,
       internal: {
-        artifactPaths: cycleProviderItemArtifactDescriptor,
+        artifactPaths: providerItemArtifactDescriptor,
       },
       items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
       label: 'quality fan-out',
@@ -161,7 +161,7 @@ test('runAssessmentProviderFanout does not write caller-specific mirror artifact
     await runAssessmentProviderFanout(state, {
       cycle: 1,
       internal: {
-        artifactPaths: cycleProviderItemArtifactDescriptor,
+        artifactPaths: providerItemArtifactDescriptor,
       },
       items: [{ value: 'tests', label: 'tests', pathSegment: 'tests' }],
       label: 'quality fan-out',

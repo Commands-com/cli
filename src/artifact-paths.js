@@ -42,9 +42,10 @@ export function cyclePromptArtifactPath(cycle, ...segments) {
 }
 
 /**
- * @param {{ artifactRoot: unknown, provider?: unknown, providerFile?: unknown, item?: unknown, itemFile?: unknown }} args
+ * @param {{ cycle?: number|string, artifactRoot: unknown, provider?: unknown, providerFile?: unknown, item?: unknown, itemFile?: unknown }} args
  */
 export function providerItemArtifactDescriptor({
+  cycle,
   artifactRoot,
   provider,
   providerFile,
@@ -56,27 +57,9 @@ export function providerItemArtifactDescriptor({
     provider: provider ?? providerFile,
     item: item ?? itemFile,
   });
+  const cycleSegment = cycle === undefined ? '' : cycleDirectory(cycle);
   return {
-    path: joinArtifactPath(parts.artifactRoot, parts.providerFile, withExtension(parts.itemFile, 'md')),
-    promptPath: promptArtifactPath(parts.providerFile, parts.itemFile),
-    ...parts,
-  };
-}
-
-export function cycleProviderItemArtifactDescriptor({
-  cycle,
-  artifactRoot,
-  provider,
-  item,
-}) {
-  const parts = providerItemArtifactSegments({ artifactRoot, provider, item });
-  return {
-    path: joinArtifactPath(
-      cycleDirectory(cycle),
-      parts.artifactRoot,
-      parts.providerFile,
-      withExtension(parts.itemFile, 'md'),
-    ),
+    path: joinArtifactPath(cycleSegment, parts.artifactRoot, parts.providerFile, withExtension(parts.itemFile, 'md')),
     promptPath: cyclePromptArtifactPath(cycle, parts.providerFile, parts.itemFile),
     ...parts,
   };

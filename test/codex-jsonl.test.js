@@ -19,6 +19,7 @@ test('codex jsonl extraction falls back to the last complete assistant message a
   assert.equal(extractCodexJsonlText(stdout), 'last complete assistant message');
   assert.deepEqual(codexJsonlStdoutDiagnostics(stdout, 1_000), [
     'stdout last message: last complete assistant message',
+    'stdout parse errors: 1 line(s)',
   ]);
 });
 
@@ -36,6 +37,25 @@ test('codex jsonl diagnostics ignore partial trailing events and keep complete s
     'stdout error: complete stream error',
     'stdout progress: running tool call',
     'stdout last message: complete assistant context',
+    'stdout parse errors: 1 line(s)',
   ]);
   assert.equal(extractCodexJsonlText(stdout), 'complete assistant context');
+});
+
+test('codex jsonl diagnostics surface a parse-error count when malformed lines mix with valid JSONL', () => {
+  const stdout = [
+    JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'ok' } }),
+    '',
+    '   ',
+    'this is not json',
+    '{"type":"turn.completed","result":"truncated',
+    JSON.stringify({ type: 'item.completed', item: { type: 'message', text: 'final' } }),
+  ].join('\n');
+
+  const diagnostics = codexJsonlStdoutDiagnostics(stdout, 1_000);
+
+  assert.ok(
+    diagnostics.includes('stdout parse errors: 2 line(s)'),
+    `expected parse-error diagnostic, got: ${JSON.stringify(diagnostics)}`,
+  );
 });

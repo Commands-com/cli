@@ -146,7 +146,12 @@ export function serializeProvider(provider) {
 function serializeProviderEntries(provider) {
   return Object.fromEntries(
     Object.entries(provider)
-      .filter(([key]) => !isSensitiveProviderField(key))
+      .filter(([key]) => {
+        if (!isSensitiveProviderField(key)) return true;
+        // stderr-only: mirrors the shared logger's `warn` channel so JSON stdout output is not polluted.
+        console.warn(`[run-state] redacted sensitive provider field: ${key}`);
+        return false;
+      })
       .map(([key, value]) => [key, serializeProviderValue(value)])
       .filter(([, value]) => value !== undefined),
   );
