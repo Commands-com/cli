@@ -290,6 +290,43 @@ test('showRun accepts timestamped run ids created by the run store', async () =>
   }
 });
 
+test('showRun accepts latest and path-style run refs', async () => {
+  const cwd = await tempDir();
+  try {
+    const { store: olderStore } = await prepareRun(cwd, {
+      kind: 'review',
+      label: 'older run',
+      metadata: { createdAt: '2026-01-01T01:01:01.000Z' },
+      writeSetupArtifacts: false,
+    });
+    const { store: newerStore } = await prepareRun(cwd, {
+      kind: 'quality',
+      label: 'newer run',
+      metadata: { createdAt: '2026-01-02T01:01:01.000Z' },
+      writeSetupArtifacts: false,
+    });
+    await olderStore.writeJson('metadata.json', {
+      kind: 'review',
+      createdAt: '2026-01-01T01:01:01.000Z',
+    });
+    await newerStore.writeJson('metadata.json', {
+      kind: 'quality',
+      createdAt: '2026-01-02T01:01:01.000Z',
+    });
+    await newerStore.write('nested/output.md', '# Output');
+
+    const latest = (await runRunsJson(cwd, ['show', 'latest'])).run;
+    assert.equal(latest.runId, newerStore.runId);
+
+    const pathRef = path.relative(cwd, newerStore.dir);
+    const shown = (await runRunsJson(cwd, ['show', pathRef])).run;
+    assert.equal(shown.runId, newerStore.runId);
+    assert.ok(shown.files.includes('nested/output.md'));
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('showRun surfaces corrupt metadata.json without leaking a raw SyntaxError', async () => {
   const cwd = await tempDir();
   try {
@@ -444,8 +481,11 @@ test('showRun rejects ids outside the timestamped run-id contract', async () => 
       (error) => isUsageError(error, `run not found: ${unicodeRunId}`),
     );
 
-    await assert.rejects(runRuns(cwd, ['show', '../outside']), /run id is required/);
-    await assert.rejects(runRuns(cwd, ['show', '20260101-010101-review-a\\b-abcdef']), /run id is required/);
+    await assert.rejects(runRuns(cwd, ['show', '../outside']), /run not found: \.\.\/outside/);
+    await assert.rejects(
+      runRuns(cwd, ['show', '20260101-010101-review-a\\b-abcdef']),
+      /run not found: 20260101-010101-review-a\\b-abcdef/,
+    );
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }

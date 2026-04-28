@@ -4,10 +4,9 @@ import { commandResult } from './command-result.js';
 import { positiveIntegerOption } from './command-options.js';
 import { UsageError } from './errors.js';
 import {
-  RUN_ID_PATTERN,
   readRunMetadataStatus,
   readRunRows,
-  runStoreRoot,
+  resolveRunDir,
 } from './run-store.js';
 
 async function listRuns(cwd, { limit = 20 } = {}) {
@@ -27,28 +26,14 @@ async function listRuns(cwd, { limit = 20 } = {}) {
 }
 
 async function showRun(cwd, runId) {
-  const safeRunId = String(runId || '').trim();
-  if (!safeRunId || safeRunId.includes('/') || safeRunId.includes('\\')) {
-    throw new UsageError('run id is required');
-  }
-  if (!RUN_ID_PATTERN.test(safeRunId)) {
-    throw new UsageError(`run not found: ${safeRunId}`);
-  }
-  const dir = path.join(runStoreRoot(cwd), safeRunId);
-  let files;
-  try {
-    files = await fs.readdir(dir, { recursive: true });
-  } catch (error) {
-    if (error?.code === 'ENOENT') {
-      throw new UsageError(`run not found: ${safeRunId}`);
-    }
-    throw error;
-  }
+  const ref = String(runId || '').trim();
+  const dir = await resolveRunDir(cwd, ref);
+  const files = await fs.readdir(dir, { recursive: true });
   // Symmetric with listRuns: a run dir with no metadata.json renders as an
   // empty-metadata record rather than a `run not found` rejection.
   const { metadata, metadataError } = await readRunMetadataStatus(dir);
   const run = {
-    runId: safeRunId,
+    runId: path.basename(dir),
     dir,
     metadata,
     files: files

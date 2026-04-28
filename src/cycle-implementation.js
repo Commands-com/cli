@@ -21,7 +21,7 @@ export { IMPLEMENTATION_PHASE_STATUS };
  * @typedef {import('./cycle-state.js').CycleRepoContext} CycleRepoContext
  * @typedef {import('./cycle-state.js').CycleStore} CycleStore
  * @typedef {import('./cycle-state.js').CycleWorkspace} CycleWorkspace
- * @typedef {import('./cycle-state.js').CycleLogger} CycleLogger
+ * @typedef {import('./cycle-state.js').CycleState} CycleState
  */
 
 /**
@@ -31,21 +31,6 @@ export { IMPLEMENTATION_PHASE_STATUS };
  * @property {number} cycle One-based cycle number.
  * @property {string} objective Objective passed to the implementation planner.
  * @property {string} findings Prior findings handed to implementers.
- */
-
-/**
- * Explicit dependency object consumed by implementation and validation. The
- * planning/timeout/retry fields plus `testCommand`, `maxImplementers`, `serial`,
- * and `parallel` are read off `options` directly; defaults for `testCommand`
- * and `maxImplementers`, and `implementationParallel` are computed inline.
- *
- * @typedef {Object} CycleImplementationDependencies
- * @property {string} kind Workflow kind for implementer log prefixes.
- * @property {CycleStore} store Artifact store.
- * @property {CycleWorkspace} workspace Active workspace.
- * @property {CycleRepoContext} context Repository context captured before implementation.
- * @property {CycleLogger} logger Command logger.
- * @property {import('./cycle-state.js').CycleRuntimeOptions} options Runtime options owned by the cycle state.
  */
 
 /**
@@ -59,7 +44,11 @@ export { IMPLEMENTATION_PHASE_STATUS };
  * @property {string} nextFindings Findings to carry into the next cycle.
  */
 
-export async function runImplementationAndValidationPhase(dependencies, {
+/**
+ * @param {CycleState} state
+ * @param {CycleImplementationValidationArgs} args
+ */
+export async function runImplementationAndValidationPhase(state, {
   cycle,
   objective,
   findings,
@@ -71,7 +60,8 @@ export async function runImplementationAndValidationPhase(dependencies, {
     context,
     logger,
     options,
-  } = dependencies;
+  } = state;
+  const phaseLogger = /** @type {{ info(message?: string): void }} */ (logger);
   const {
     primaryProvider,
     providers,
@@ -85,7 +75,7 @@ export async function runImplementationAndValidationPhase(dependencies, {
   const testCommand = rawTestCommand === undefined ? '' : rawTestCommand;
   const maxImplementers = rawMaxImplementers === undefined ? 1 : rawMaxImplementers;
   const implementationParallel = !serial && maxImplementers > 1;
-  logger.info(`cycle ${cycle}: orchestrator (${primaryProvider.id})`);
+  phaseLogger.info(`cycle ${cycle}: orchestrator (${primaryProvider.id})`);
   const implementationPhase = await runOrchestratedImplementationPhase({
     provider: primaryProvider,
     providers,
@@ -101,7 +91,7 @@ export async function runImplementationAndValidationPhase(dependencies, {
     maxImplementers,
     parallel: implementationParallel,
     retries: providerRetries,
-    logger,
+    logger: phaseLogger,
     logPrefix: kind,
   });
 

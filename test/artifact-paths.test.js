@@ -361,7 +361,7 @@ test('implementation validation writes normalized planner, implementer, test, an
     });
 
     await runImplementationAndValidationPhase(state, {
-      cycle: '005',
+      cycle: 5,
       objective: 'Normalize validation artifacts',
       findings: 'Finding text.',
     });

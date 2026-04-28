@@ -322,6 +322,11 @@ async function resolveWorktreeWorkspaceCwd(cwd, isolated) {
   );
 }
 
+// Resume option precedence, applied in order:
+// 1. Start from stored options; fall back to next for fields only present on next.
+// 2. CYCLE_RESUME_OPTION_OVERRIDES: when matching CLI flags are present, force next for those fields.
+// 3. RESUME_ALWAYS_NEXT_FIELDS: always taken from next.
+// 4. If stored.providers is missing or empty, RESUME_PROVIDER_FIELDS fall through to next.
 export function mergeResumeOptions(storedOptions, nextOptions, flags) {
   const stored = storedOptions && typeof storedOptions === 'object' ? storedOptions : {};
   const decisions = new Map();
