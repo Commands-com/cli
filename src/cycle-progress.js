@@ -12,16 +12,15 @@ export function applyCycleProgress(state, cycleRecord) {
     current: cycleRecord,
   });
 
-  if (!previous || progress.changed) {
-    state.stalledCycles = 0;
-  } else {
-    state.stalledCycles = normalizeFiniteNonNegativeNumber(state.stalledCycles) + 1;
-  }
+  const stalledCycles = !previous || progress.changed
+    ? 0
+    : normalizeFiniteNonNegativeNumber(previous.progress?.stalledCycles) + 1;
   cycleRecord.progress = {
     improved: progress.improved,
     changed: progress.changed,
-    stalledCycles: state.stalledCycles,
+    stalledCycles,
   };
+  state.stalledCycles = stalledCycles;
   return cycleRecord.progress;
 }
 

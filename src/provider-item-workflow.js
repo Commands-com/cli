@@ -126,55 +126,59 @@ export async function runProviderItem(args = {}) {
     timeoutMs,
     logger = {},
   } = args;
-  const {
-    execution,
-    retry,
-    artifactPolicy,
-    outputPolicy,
-    session,
-  } = normalizeProviderItemPolicies(args);
 
   await artifacts.writePrompt(prompt);
 
+  const resumeSessionId = String(args.session?.resumeSessionId || '').trim();
+
   let result;
   try {
-    const run = (resumeSessionId) => runProviderWithRetry(provider, {
+    const run = (sessionId) => runProviderWithRetry(provider, {
       cwd,
       prompt,
       model,
-      allowTools: execution.allowTools,
+      allowTools: args.execution?.allowTools ?? false,
       timeoutMs,
-      resumeSessionId,
-      retries: retry.retries,
-      retryDelayMs: retry.delayMs,
+      resumeSessionId: sessionId,
+      retries: args.retry?.retries,
+      retryDelayMs: args.retry?.delayMs,
       onRetry: async ({ retry: retryNumber, retries, error }) => {
         const payload = providerItemHookPayload({ provider, label, artifacts, error, retry: retryNumber, retries });
-        if (typeof artifactPolicy.writeRetry === 'function') {
-          await artifactPolicy.writeRetry(payload);
+        if (typeof args.artifactPolicy?.writeRetry === 'function') {
+          await args.artifactPolicy.writeRetry(payload);
         }
-        logger.info?.(retry.logMessage(payload));
+        const logMessage = typeof args.retry?.logMessage === 'function'
+          ? args.retry.logMessage
+          : defaultRetryLogMessage;
+        logger.info?.(logMessage({
+          ...payload,
+          retry: retryNumber,
+          retries,
+        }));
       },
     });
     try {
-      result = await run(session.resumeSessionId);
+      result = await run(resumeSessionId);
     } catch (error) {
-      if (!session.resumeSessionId || !isInvalidSessionError(error)) throw error;
-      await session.onSessionInvalid?.(providerItemHookPayload({ provider, label, artifacts, error }));
+      if (!resumeSessionId || !isInvalidSessionError(error)) throw error;
+      if (typeof args.session?.onSessionInvalid === 'function') {
+        await args.session.onSessionInvalid(providerItemHookPayload({ provider, label, artifacts, error }));
+      }
       logger.info?.(`${provider.id}/${label}: provider session invalid; retrying fresh`);
       result = await run('');
     }
-    if (!outputPolicy.allowEmpty && !String(result?.text ?? '').trim()) {
+    if (!args.outputPolicy?.allowEmpty && !String(result?.text ?? '').trim()) {
       throw new Error(`${provider.id}/${label}: provider returned empty output`);
     }
   } catch (error) {
-    if (typeof artifactPolicy.writeFailure === 'function') {
-      await artifactPolicy.writeFailure(providerItemHookPayload({ provider, label, artifacts, error }));
+    if (typeof args.artifactPolicy?.writeFailure === 'function') {
+      await args.artifactPolicy.writeFailure(providerItemHookPayload({ provider, label, artifacts, error }));
     }
     throw error;
   }
 
-  if (result.sessionId) {
-    await session.onSession?.(providerItemHookPayload({
+  if (result.sessionId && typeof args.session?.onSession === 'function') {
+    await args.session.onSession(providerItemHookPayload({
       provider,
       label,
       artifacts,
@@ -186,41 +190,6 @@ export async function runProviderItem(args = {}) {
     artifact: artifacts,
     result,
     text: result.text,
-  };
-}
-
-function normalizeProviderItemPolicies(args) {
-  return {
-    execution: {
-      allowTools: args.execution?.allowTools ?? false,
-    },
-    retry: {
-      retries: args.retry?.retries,
-      delayMs: args.retry?.delayMs,
-      logMessage: typeof args.retry?.logMessage === 'function'
-        ? args.retry.logMessage
-        : defaultRetryLogMessage,
-    },
-    artifactPolicy: {
-      writeRetry: typeof args.artifactPolicy?.writeRetry === 'function'
-        ? args.artifactPolicy.writeRetry
-        : undefined,
-      writeFailure: typeof args.artifactPolicy?.writeFailure === 'function'
-        ? args.artifactPolicy.writeFailure
-        : undefined,
-    },
-    outputPolicy: {
-      allowEmpty: Boolean(args.outputPolicy?.allowEmpty),
-    },
-    session: {
-      resumeSessionId: String(args.session?.resumeSessionId || '').trim(),
-      onSessionInvalid: typeof args.session?.onSessionInvalid === 'function'
-        ? args.session.onSessionInvalid
-        : undefined,
-      onSession: typeof args.session?.onSession === 'function'
-        ? args.session.onSession
-        : undefined,
-    },
   };
 }
 

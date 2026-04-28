@@ -182,7 +182,25 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   assert.deepEqual(parseQualitySummary(duplicateField), {
     score: 'B',
     issueCount: 1,
-    synopsis: 'First summary wins.',
+    synopsis: 'Duplicate summary: First summary wins.',
+  });
+
+  const duplicateScore = [
+    '```yaml',
+    'score: A',
+    'score: F',
+    'verdict: clean',
+    'issue_count: 0',
+    'summary: Looks fine.',
+    '```',
+  ].join('\n');
+  // Duplicate score must surface in the synopsis so the contradiction
+  // is visible — otherwise a provider emitting two `score:` lines collapses
+  // into a generic "still issues" without naming the contradicted field.
+  assert.deepEqual(parseQualitySummary(duplicateScore), {
+    score: 'B',
+    issueCount: 1,
+    synopsis: 'Duplicate score: Looks fine.',
   });
 
   assert.deepEqual(parseQualitySummary([

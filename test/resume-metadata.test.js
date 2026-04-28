@@ -68,3 +68,30 @@ test('metadataListOption falls back when metadata does not contain a list', () =
     ['architecture'],
   );
 });
+
+test('metadataListOption ignores non-string array entries and falls back when none remain', () => {
+  assert.deepEqual(
+    metadataListOption(parsed(), { areas: [1, { name: 'tests' }, '', '   ', null] }, {
+      flag: 'area',
+      metadataField: 'areas',
+      fallback: ['architecture'],
+    }),
+    ['architecture'],
+  );
+  assert.deepEqual(
+    metadataListOption(parsed({ area: 'correctness' }), { areas: [42, null] }, {
+      flag: 'area',
+      metadataField: 'areas',
+      fallback: ['architecture'],
+    }),
+    ['correctness'],
+  );
+  assert.deepEqual(
+    metadataListOption(parsed(), { areas: [42, '  tests  ', null, ''] }, {
+      flag: 'area',
+      metadataField: 'areas',
+      fallback: ['architecture'],
+    }),
+    ['tests'],
+  );
+});

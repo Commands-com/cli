@@ -182,6 +182,13 @@ function priorFindingsPart(priorFindings) {
   return priorFindings ? ['', 'Previously reported findings:', priorFindings].join('\n') : '';
 }
 
+/** @param {ReadonlyArray<ReadonlyArray<string>>} sections */
+function joinSections(sections) {
+  return sections
+    .filter((section) => section.length > 0)
+    .flatMap((section, i) => (i === 0 ? [...section] : ['', ...section]));
+}
+
 /** @param {AssessmentPromptPartsArgs} args */
 function assessmentPromptParts({
   opening,
@@ -193,21 +200,14 @@ function assessmentPromptParts({
   trailingIntro = '',
   trailingLines = [],
 }) {
-  return [
-    opening,
-    ...instructionLines,
-    '',
-    ...detailLines,
-    '',
-    'Repository context:',
-    formatRepoContext(context),
-    ...bodyParts,
-    '',
-    ...summaryContractParts(config),
-    '',
-    trailingIntro,
-    ...trailingLines,
-  ];
+  return joinSections([
+    [opening, ...instructionLines],
+    detailLines,
+    ['Repository context:', formatRepoContext(context)],
+    bodyParts,
+    summaryContractParts(config),
+    [trailingIntro, ...trailingLines],
+  ]);
 }
 
 /** @param {BuildFindingPromptArgs} args */
@@ -259,11 +259,7 @@ function buildSynthesisPrompt({
     instructionLines: [instructions],
     detailLines,
     context,
-    bodyParts: [
-      '',
-      outputsLabel,
-      outputs || '(none)',
-    ],
+    bodyParts: [outputsLabel, outputs || '(none)'],
     config,
     trailingIntro: 'Then include:',
     trailingLines: trailing,

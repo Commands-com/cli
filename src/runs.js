@@ -25,10 +25,44 @@ async function listRuns(cwd, { limit = 20 } = {}) {
   });
 }
 
+// Cap on file entries surfaced by `runs show`. A typical run holds tens to
+// low hundreds of artifacts; long-lived runs with per-cycle fanout can
+// balloon into thousands. 1000 keeps the walk bounded while staying well
+// above the common case so truncation is rare in practice. Only non-directory
+// entries count toward the cap, so deep but sparse trees are not prematurely
+// truncated; directory entries are still emitted in the listing.
+const SHOW_RUN_FILE_CAP = 1000;
+
+async function readShowRunFiles(dir, cap) {
+  const files = [];
+  let fileCount = 0;
+  let truncated = false;
+  async function walk(absolute, relative) {
+    const entries = await fs.readdir(absolute, { withFileTypes: true });
+    for (const entry of entries) {
+      const childRelative = relative ? path.join(relative, entry.name) : entry.name;
+      if (entry.isDirectory()) {
+        files.push(childRelative);
+        await walk(path.join(absolute, entry.name), childRelative);
+        if (truncated) return;
+      } else {
+        if (fileCount >= cap) {
+          truncated = true;
+          return;
+        }
+        files.push(childRelative);
+        fileCount += 1;
+      }
+    }
+  }
+  await walk(dir, '');
+  return { files, truncated };
+}
+
 async function showRun(cwd, runId) {
   const ref = String(runId || '').trim();
   const dir = await resolveRunDir(cwd, ref);
-  const files = await fs.readdir(dir, { recursive: true });
+  const { files, truncated } = await readShowRunFiles(dir, SHOW_RUN_FILE_CAP);
   // Symmetric with listRuns: a run dir with no metadata.json renders as an
   // empty-metadata record rather than a `run not found` rejection.
   const { metadata, metadataError } = await readRunMetadataStatus(dir);
@@ -36,12 +70,10 @@ async function showRun(cwd, runId) {
     runId: path.basename(dir),
     dir,
     metadata,
-    files: files
-      .filter((file) => typeof file === 'string')
-      .map(portablePath)
-      .sort(),
+    files: files.map(portablePath).sort(),
   };
   if (metadataError) run.metadataError = metadataError;
+  if (truncated) run.truncated = true;
   return run;
 }
 

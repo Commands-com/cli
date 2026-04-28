@@ -31,26 +31,24 @@ function booleanOption(flags, name) {
   return normalizeFlags(flags).has(name);
 }
 
-function readNumericFlagState(flags, name) {
+function readNumericRaw(flags, name) {
   const normalizedFlags = normalizeFlags(flags);
-  if (!normalizedFlags.has(name)) return { state: 'absent' };
+  if (!normalizedFlags.has(name)) return undefined;
   const raw = normalizedFlags.get(name);
-  if (!isReadableOptionValue(raw)) return { state: 'missing-value' };
-  if (typeof raw === 'string' && raw.trim().toLowerCase() === 'true') {
-    return { state: 'missing-value' };
-  }
-  return { state: 'present', raw: String(raw) };
+  if (!isReadableOptionValue(raw)) return null;
+  if (typeof raw === 'string' && raw.trim().toLowerCase() === 'true') return null;
+  return String(raw);
 }
 
 function readStrictNumericOption(flags, name, fallback, { kind, qualifier, validate, max }) {
-  const result = readNumericFlagState(flags, name);
-  if (result.state === 'absent') return fallback;
-  if (result.state === 'missing-value') {
+  const raw = readNumericRaw(flags, name);
+  if (raw === undefined) return fallback;
+  if (raw === null) {
     throw new UsageError(`--${name} requires ${qualifier} integer value`);
   }
-  const parsed = strictInteger(result.raw);
+  const parsed = strictInteger(raw);
   if (parsed === undefined || (validate && !validate(parsed))) {
-    throw new UsageError(`--${name} expects ${kind}, got "${result.raw}"`);
+    throw new UsageError(`--${name} expects ${kind}, got "${raw}"`);
   }
   if (max !== undefined && parsed > max) {
     throw new UsageError(`--${name} must be at most ${max}, got ${parsed}`);

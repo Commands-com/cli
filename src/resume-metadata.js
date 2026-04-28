@@ -26,7 +26,13 @@ export async function readResumeMetadata(parsed, cwd) {
 export function metadataListOption(parsed, metadata, { flag, metadataField, fallback }) {
   if (!hasFlag(parsed.flags, flag)) {
     const values = metadata?.[metadataField];
-    if (Array.isArray(values) && values.length) return values;
+    if (Array.isArray(values)) {
+      const usable = values
+        .filter((entry) => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+      if (usable.length) return usable;
+    }
   }
   return listOption(parsed.flags, flag, fallback);
 }

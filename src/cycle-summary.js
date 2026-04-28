@@ -26,6 +26,17 @@ function numericSummaryIssueCount(summary) {
   return undefined;
 }
 
+function duplicateFieldNames(duplicates) {
+  if (!Array.isArray(duplicates) || duplicates.length === 0) return [];
+  return [...new Set(duplicates.map((entry) => entry.field).filter(Boolean))];
+}
+
+function annotateSynopsisDuplicates(synopsis, duplicates) {
+  const fields = duplicateFieldNames(duplicates);
+  if (!fields.length) return synopsis;
+  return `Duplicate ${fields.join(', ')}: ${synopsis}`;
+}
+
 function parseAssessmentSummary(text, { structured, fallback }) {
   const source = String(text || '').trimStart();
   const summary = parseSummaryBlock(source, { topOnly: true });
@@ -39,7 +50,8 @@ function parseAssessmentSummary(text, { structured, fallback }) {
     .map((item) => item.replace(/^[-*]\s+/, '').trim())
     .find((item) => item && !item.startsWith('#'))
     || 'No synopsis returned.';
-  const synopsis = shorten(summary.summary || yamlScalar(firstBodyLine));
+  const baseSynopsis = shorten(summary.summary || yamlScalar(firstBodyLine));
+  const synopsis = annotateSynopsisDuplicates(baseSynopsis, summary.duplicates);
 
   return {
     score: normalizeAssessmentScore(summary.score, issueCount),
