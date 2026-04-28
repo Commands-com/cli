@@ -3,10 +3,8 @@ import {
   implementationTaskWorkspace,
   taskWorkspaceRepoRelativePath,
 } from './implementation-task-context.js';
-import {
-  captureGitPatch,
-  validateTaskPatch,
-} from './task-worktrees.js';
+import { captureGitPatch } from './task-worktrees.js';
+import { validateTaskPatch } from './task-patch-validation.js';
 
 /**
  * @typedef {import('./cycle-state.js').CycleStore} CycleStore

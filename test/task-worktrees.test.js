@@ -9,8 +9,8 @@ import {
   prepareTaskWorktreeBaseline,
   removeTaskWorktree,
   repoRelativePathForContext,
-  validateTaskPatch,
 } from '../src/task-worktrees.js';
+import { validateTaskPatch } from '../src/task-patch-validation.js';
 import { runGit } from '../src/git.js';
 import { initGitRepo } from './support/git.js';
 

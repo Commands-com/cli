@@ -4,11 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
-import {
-  RESUME_FIELD_RULES,
-  mergeResumeOptions,
-  runCycleWorkflow,
-} from '../src/cycle-workflow.js';
+import { runCycleWorkflow } from '../src/cycle-workflow.js';
+import { RESUME_FIELD_RULES, mergeResumeOptions } from '../src/resume-merge.js';
 
 const RESUME_OVERRIDE_OPTIONS = COMMAND_OPTIONS.filter(
   (option) => option.resumeOverrideFields.length && !option.resumeAlwaysOverrides,

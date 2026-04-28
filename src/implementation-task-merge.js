@@ -3,9 +3,8 @@ import {
   captureGitPatch,
   removeTaskWorktree,
   repoRelativePathForContext,
-  validatePatchFiles,
-  validateTaskPatch,
 } from './task-worktrees.js';
+import { validatePatchFiles, validateTaskPatch } from './task-patch-validation.js';
 import {
   taskArtifacts,
   writeTaskState,

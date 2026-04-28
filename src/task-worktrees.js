@@ -2,30 +2,17 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { hasLocalStatePathSegment, localWorktreesPath } from './config.js';
+import { localWorktreesPath } from './config.js';
 import { filterCliStatus, runGit } from './git.js';
 import { runProcess } from './process-runner.js';
 import { slug } from './run-id.js';
+import { normalizeGitPath } from './task-patch-validation.js';
 
 const TASK_WORKTREE_SLUG_MAX = 48;
 const DIFF_EXCLUDED_CLI_STATE = Object.freeze([':(exclude).commands-com/**', ':(glob,exclude)**/.commands-com/**']);
 
 function hasSafeRelativeScope(relative) {
   return Boolean(relative && relative !== '.' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
-}
-
-function normalizeGitPath(filePath) {
-  return String(filePath || '')
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-    .replace(/\/+$/, '');
-}
-
-function normalizeAssignedScope(filePath) {
-  const raw = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
-  const normalized = normalizeGitPath(raw);
-  if (!normalized) return '';
-  return raw.endsWith('/') ? `${normalized}/` : normalized;
 }
 
 function normalizeRepoRelativePath(filePath) {
@@ -361,56 +348,4 @@ export async function applyGitPatch(cwd, patch, { threeWay = true, timeoutMs = 6
     stderr: result.stderr,
     exitCode: result.exitCode,
   };
-}
-
-/** @param {{ label?: string, files?: Array<string>, assignedFiles?: Array<string> }} [args] */
-export function validatePatchFiles({ label = 'patch', files, assignedFiles } = {}) {
-  const changedFiles = Array.isArray(files)
-    ? files.map((file) => normalizeGitPath(file)).filter(Boolean)
-    : [];
-  const errors = [];
-  const outsideScopeFiles = new Set();
-  for (const file of changedFiles) {
-    if (isOutsideTaskScope(file)) {
-      errors.push(`${label} changed file outside assigned scope: ${file}`);
-      outsideScopeFiles.add(file);
-      continue;
-    }
-    if (hasLocalStatePathSegment(file)) {
-      errors.push(`${label} changed CLI-owned artifact path: ${file}`);
-    }
-  }
-
-  const assigned = Array.isArray(assignedFiles)
-    ? assignedFiles.map((file) => normalizeAssignedScope(file)).filter(Boolean)
-    : [];
-  if (assigned.length) {
-    for (const file of changedFiles) {
-      if (outsideScopeFiles.has(file)) continue;
-      if (!assigned.some((scope) => assignedScopeAllowsFile(scope, file))) {
-        errors.push(`${label} changed unassigned file: ${file}`);
-      }
-    }
-  }
-
-  return {
-    ok: errors.length === 0,
-    errors,
-  };
-}
-
-export function validateTaskPatch({ task, files }) {
-  return validatePatchFiles({ label: `task ${task?.id || 'unknown'}`, files, assignedFiles: task?.files });
-}
-
-function assignedScopeAllowsFile(scope, file) {
-  return scope.endsWith('/') ? file.startsWith(scope) : file === scope;
-}
-
-function isOutsideTaskScope(file) {
-  return file === '..'
-    || file.startsWith('../')
-    || file.includes('/../')
-    || path.posix.isAbsolute(file)
-    || /^[A-Za-z]:\//.test(file);
 }

@@ -61,6 +61,13 @@ function runStatePayload(state, {
   status = 'running',
   error,
 } = {}) {
+  const redactedKeys = [];
+  const options = serializeOptionsCollectingRedactions(state.options, redactedKeys);
+  if (redactedKeys.length && typeof state?.logger?.warn === 'function') {
+    for (const key of redactedKeys) {
+      state.logger.warn(`[run-state] redacted sensitive provider field: ${key}`);
+    }
+  }
   return {
     version: RUN_STATE_VERSION,
     status: normalizeStateString(status),
@@ -70,7 +77,7 @@ function runStatePayload(state, {
     storeDir: state.store?.dir || '',
     workspace: state.workspace || {},
     context: state.context || {},
-    options: serializeCycleOptions(state.options),
+    options,
     cycles: Array.isArray(state.cycles) ? state.cycles : [],
     providerSessions: serializeProviderSessions(state.providerSessions),
     priorFindings: state.priorFindings || '',
@@ -122,48 +129,53 @@ function normalizeStateString(value) {
 }
 
 export function serializeCycleOptions(options = {}) {
+  return serializeOptionsCollectingRedactions(options, null);
+}
+
+function serializeOptionsCollectingRedactions(options, redactedKeys) {
   const source = isObjectRecord(options) ? options : {};
   return {
     ...source,
-    providers: serializeProviders(source.providers),
-    primaryProvider: serializeProvider(source.primaryProvider),
+    providers: Array.isArray(source.providers)
+      ? source.providers
+        .map((provider) => serializeProviderInto(provider, redactedKeys))
+        .filter((provider) => provider !== undefined)
+      : [],
+    primaryProvider: serializeProviderInto(source.primaryProvider, redactedKeys),
   };
 }
 
-function serializeProviders(providers) {
-  return Array.isArray(providers)
-    ? providers.map((provider) => serializeProvider(provider)).filter((provider) => provider !== undefined)
-    : [];
+export function serializeProvider(provider) {
+  return serializeProviderInto(provider, null);
 }
 
-export function serializeProvider(provider) {
+function serializeProviderInto(provider, redactedKeys) {
   if (provider === null) return null;
   if (isSerializablePrimitive(provider)) return provider;
   if (!provider || typeof provider !== 'object') return undefined;
-  return serializeProviderEntries(provider);
+  return serializeProviderEntries(provider, redactedKeys);
 }
 
-function serializeProviderEntries(provider) {
+function serializeProviderEntries(provider, redactedKeys) {
   return Object.fromEntries(
     Object.entries(provider)
       .filter(([key]) => {
         if (!isSensitiveProviderField(key)) return true;
-        // stderr-only: mirrors the shared logger's `warn` channel so JSON stdout output is not polluted.
-        console.warn(`[run-state] redacted sensitive provider field: ${key}`);
+        if (redactedKeys) redactedKeys.push(key);
         return false;
       })
-      .map(([key, value]) => [key, serializeProviderValue(value)])
+      .map(([key, value]) => [key, serializeProviderValue(value, redactedKeys)])
       .filter(([, value]) => value !== undefined),
   );
 }
 
-function serializeProviderValue(value) {
+function serializeProviderValue(value, redactedKeys) {
   if (value === null) return null;
   if (isSerializablePrimitive(value)) return value;
   if (Array.isArray(value)) {
-    return value.map((item) => serializeProviderValue(item)).filter((item) => item !== undefined);
+    return value.map((item) => serializeProviderValue(item, redactedKeys)).filter((item) => item !== undefined);
   }
-  if (isObjectRecord(value)) return serializeProviderEntries(value);
+  if (isObjectRecord(value)) return serializeProviderEntries(value, redactedKeys);
   return undefined;
 }
 
