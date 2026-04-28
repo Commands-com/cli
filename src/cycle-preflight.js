@@ -1,4 +1,5 @@
 import { artifactPath } from './artifact-paths.js';
+import { MAX_IMPLEMENTERS } from './command-option-schema.js';
 import { SCORE_ORDER } from './summary-contract.js';
 import { shouldBlockUnsafeFix } from './workflow.js';
 
@@ -81,6 +82,22 @@ function preflightChecks(state) {
       'cycle-cap',
       !options.fix || Math.max(0, Number(options.maxCycles || 0)) > 0,
       '--fix requires at least one cycle',
+    ),
+    check(
+      'max-implementers',
+      options.maxImplementers === undefined
+        || options.maxImplementers === null
+        || (Number.isInteger(options.maxImplementers)
+          && options.maxImplementers >= 1
+          && options.maxImplementers <= MAX_IMPLEMENTERS),
+      `--max-implementers must be between 1 and ${MAX_IMPLEMENTERS}`,
+    ),
+    check(
+      'stall-cycles',
+      options.stallCycles === undefined
+        || options.stallCycles === null
+        || (Number.isInteger(options.stallCycles) && options.stallCycles >= 0),
+      '--stall-cycles must be a non-negative integer',
     ),
     check(
       'until-score',

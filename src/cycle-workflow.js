@@ -23,7 +23,6 @@ import {
   writeRunState,
 } from './run-state.js';
 import {
-  createCycleRecorder,
   createCycleState,
 } from './cycle-state.js';
 import { runAssessmentCycles } from './assessment-cycle.js';
@@ -236,13 +235,12 @@ export async function runCycleWorkflow(parsed, {
     stalledCycles: resume?.state.stalledCycles,
     stopReason: '',
   });
-  const recorder = createCycleRecorder(state);
   let finalStatus = 'running';
   let failure;
 
   try {
     if (workspace.mode === WORKSPACE_MODES.WORKTREE && !resume) {
-      recorder.setContext(await collectRepoContext(workspace.cwd, { changed: options.changed }));
+      state.context = await collectRepoContext(workspace.cwd, { changed: options.changed });
     }
 
     if (!resume) {

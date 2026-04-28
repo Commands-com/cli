@@ -16,10 +16,8 @@ import {
   formatIssueCount,
   parseQualitySummary,
   summarizeScoredOutputs,
-  worstScore,
 } from './cycle-summary.js';
-import { hasFlag, listOption, stringOption } from './command-options.js';
-import { readRunMetadata } from './run-store.js';
+import { metadataListOption, readResumeMetadata } from './resume-metadata.js';
 import { createCommandLogger } from './logger.js';
 import {
   buildQualityAuditPrompt,
@@ -115,11 +113,11 @@ async function resolveQualityAreaDescriptors(parsed, cwd) {
 }
 
 async function loadQualityAreas(parsed, cwd) {
-  if (stringOption(parsed.flags, 'resume', '') && !hasFlag(parsed.flags, 'area')) {
-    const { value: metadata } = await readRunMetadata(cwd, stringOption(parsed.flags, 'resume', ''));
-    if (Array.isArray(metadata.areas) && metadata.areas.length) return metadata.areas;
-  }
-  return listOption(parsed.flags, 'area', /** @type {string[]} */ (DEFAULT_AREAS));
+  return metadataListOption(parsed, await readResumeMetadata(parsed, cwd), {
+    flag: 'area',
+    metadataField: 'areas',
+    fallback: /** @type {string[]} */ (DEFAULT_AREAS),
+  });
 }
 
 function createQualityAssessmentAdapter({ areas, descriptors }) {
@@ -211,7 +209,7 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
     implementation({ cycleRecord }) {
       return {
         objective: `Improve code quality for areas: ${areas.join(', ')}`,
-        testFailureUpdates: { score: worstScore([cycleRecord.score, 'F']) },
+        testFailureUpdates: { score: 'F' },
       };
     },
   };

@@ -53,8 +53,28 @@ test('runCyclePreflight writes a passing preflight payload', async () => {
       ['dirty-worktree', true, ''],
       ['test-command', true, ''],
       ['cycle-cap', true, ''],
+      ['max-implementers', true, ''],
+      ['stall-cycles', true, ''],
       ['until-score', true, ''],
     ],
+  );
+});
+
+test('runCyclePreflight rejects out-of-range maxImplementers from a tampered resume state', async () => {
+  const state = testState({ options: { maxImplementers: 1000 } });
+
+  await assert.rejects(
+    runCyclePreflight(state),
+    /--max-implementers must be between 1 and 32/,
+  );
+});
+
+test('runCyclePreflight rejects negative stallCycles from a tampered resume state', async () => {
+  const state = testState({ options: { stallCycles: -1 } });
+
+  await assert.rejects(
+    runCyclePreflight(state),
+    /--stall-cycles must be a non-negative integer/,
   );
 });
 

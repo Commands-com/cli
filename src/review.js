@@ -9,8 +9,7 @@ import {
   buildReviewCompletionPayload,
   completeAssessmentCommandRun,
 } from './assessment-completion.js';
-import { hasFlag, listOption, stringOption } from './command-options.js';
-import { readRunMetadata } from './run-store.js';
+import { metadataListOption, readResumeMetadata } from './resume-metadata.js';
 import {
   formatIssueCount,
   parseReviewSummary,
@@ -72,13 +71,15 @@ const DEFAULT_REVIEWERS = Object.freeze(['correctness', 'tests', 'maintainabilit
  * @param {RunReviewCommandArgs} args
  */
 export async function runReviewCommand(parsed, { cwd, logger = createCommandLogger(parsed, { kind: 'review' }), dependencies = {} }) {
-  const metadata = await resumeMetadata(parsed, cwd);
+  const metadata = await readResumeMetadata(parsed, cwd);
   const objective = parsed.positionals.join(' ').trim()
     || metadata?.objective
     || 'Review the current repository changes.';
-  const reviewers = metadata && !hasFlag(parsed.flags, 'reviewers') && Array.isArray(metadata.reviewers) && metadata.reviewers.length
-    ? metadata.reviewers
-    : listOption(parsed.flags, 'reviewers', /** @type {string[]} */ (DEFAULT_REVIEWERS));
+  const reviewers = metadataListOption(parsed, metadata, {
+    flag: 'reviewers',
+    metadataField: 'reviewers',
+    fallback: /** @type {string[]} */ (DEFAULT_REVIEWERS),
+  });
   const { runCycleWorkflow: workflow = runCycleWorkflow, ...workflowDeps } = dependencies;
 
   const state = await workflow(parsed, {
@@ -103,12 +104,6 @@ export async function runReviewCommand(parsed, { cwd, logger = createCommandLogg
     buildCompletionPayload: buildReviewCompletionPayload,
     hasFinalIssues: reviewHasFinalIssues,
   });
-}
-
-async function resumeMetadata(parsed, cwd) {
-  const resume = stringOption(parsed.flags, 'resume', '');
-  if (!resume) return null;
-  return (await readRunMetadata(cwd, resume)).value;
 }
 
 function createReviewAssessmentAdapter({ objective, reviewers }) {
