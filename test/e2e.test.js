@@ -412,7 +412,13 @@ test('--cwd targets a different directory and writes runs there', async () => {
     const canonicalTarget = await fs.realpath(target);
     const result = await runCli(['review', 'cwd test', '--provider', 'mock', '--cwd', target, '--json'], elsewhere);
     const parsed = assertCliOk(result);
-    assert.equal(parsed.reportPath.startsWith(canonicalTarget), true, `reportPath should start with ${canonicalTarget}, got ${parsed.reportPath}`);
+    const canonicalReportPath = await fs.realpath(parsed.reportPath);
+    const relativeReportPath = path.relative(canonicalTarget, canonicalReportPath);
+    assert.equal(
+      Boolean(relativeReportPath && !relativeReportPath.startsWith('..') && !path.isAbsolute(relativeReportPath)),
+      true,
+      `reportPath should be under ${canonicalTarget}, got ${canonicalReportPath}`,
+    );
     const runsRoot = localRunsPath(canonicalTarget);
     const runIds = await fs.readdir(runsRoot);
     assert.equal(runIds.length, 1);
