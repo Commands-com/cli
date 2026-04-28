@@ -216,22 +216,7 @@ test('resolveCycleCommandOptions centralizes serial and parallel behavior', () =
       item.name,
     );
   }
-});
 
-test('public command option resolvers apply fanout mode precedence', () => {
-  assert.deepEqual(
-    optionSubset(resolveCycleCommandOptions(flags()), ['serial', 'parallel']),
-    { serial: false, parallel: true },
-    'cycle fanout should default to parallel',
-  );
-  assert.deepEqual(
-    optionSubset(resolveCycleCommandOptions(flags([
-      ['parallel', 'true'],
-      ['serial', 'true'],
-    ])), ['serial', 'parallel']),
-    { serial: true, parallel: false },
-    'cycle serial should disable explicit and default parallel fanout',
-  );
   assert.deepEqual(
     optionSubset(resolveRoomCommandOptions(flags([
       ['parallel', 'true'],
@@ -335,6 +320,7 @@ test('runCycleWorkflow uses shared defaults after provider resolution', async ()
         ['fix', 'true'],
         ['retries', '0'],
         ['timeout-ms', '1'],
+        ['test', 'true'],
       ]),
     }, {
       cwd,

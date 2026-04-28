@@ -68,6 +68,7 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {boolean} [changed] Whether the first cycle is changed-files scoped.
  * @property {boolean} [fix] Whether implementation cycles are enabled.
  * @property {boolean} [worktree] Whether fixes run in an isolated worktree.
+ * @property {string} [baseRef] Base ref used when creating isolated worktrees.
  * @property {boolean} [keepWorktree] Whether to keep isolated worktrees.
  * @property {boolean} [allowDirty] Whether fixing a dirty tree is allowed.
  * @property {boolean} [serial] Whether provider/implementer fan-out is serialized.
@@ -103,7 +104,11 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {number} cycle One-based cycle number.
  * @property {string} [score] Latest cycle score from the synthesis or output summary.
  * @property {number} [issueCount] Aggregate issue count for the cycle.
+ * @property {number} [reviewerIssueCount] Review adapter pre-synthesis issue count.
+ * @property {number} [providerIssueCount] Quality adapter pre-synthesis issue count.
  * @property {string} [synopsis] Cycle synopsis line.
+ * @property {Array<Object>} [outputs] Quality adapter outputs.
+ * @property {Array<Object>} [reviewers] Review adapter outputs.
  * @property {string} [synthesisProvider] Provider id used for synthesis.
  * @property {string} [synthesis] Synthesis text (empty when synthesis fails).
  * @property {string} [synthesisError] Synthesis failure message.

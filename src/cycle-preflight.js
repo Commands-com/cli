@@ -1,5 +1,7 @@
+import fs from 'node:fs/promises';
 import { artifactPath } from './artifact-paths.js';
 import { MAX_IMPLEMENTERS } from './command-option-schema.js';
+import { runGit } from './git.js';
 import { SCORE_ORDER } from './summary-contract.js';
 import { shouldBlockUnsafeFix } from './workflow.js';
 
@@ -28,7 +30,8 @@ import { shouldBlockUnsafeFix } from './workflow.js';
  * @returns {Promise<PreflightResult>}
  */
 export async function runCyclePreflight(state) {
-  const checks = preflightChecks(state);
+  const ioResults = await runPreflightIo(state);
+  const checks = preflightChecks(state, ioResults);
   const ok = checks.every((check) => check.ok);
   const payload = {
     ok,
@@ -48,11 +51,50 @@ export async function runCyclePreflight(state) {
 
 /**
  * @param {CycleState} state
+ * @returns {Promise<{ testRepoRootOk: boolean, baseRefOk: boolean }>}
+ */
+async function runPreflightIo(state) {
+  const options = state?.options || {};
+  const repoRoot = state?.context?.repoRoot;
+  const gitRoot = state?.context?.gitRoot;
+
+  const testCommandActive = typeof options.testCommand === 'string' && options.testCommand.trim() !== '';
+  let testRepoRootOk = true;
+  if (testCommandActive) {
+    testRepoRootOk = false;
+    if (typeof repoRoot === 'string' && repoRoot !== '') {
+      try {
+        const stat = await fs.stat(repoRoot);
+        testRepoRootOk = stat.isDirectory();
+      } catch {
+        testRepoRootOk = false;
+      }
+    }
+  }
+
+  let baseRefOk = true;
+  if (options.worktree && options.baseRef) {
+    baseRefOk = false;
+    if (typeof gitRoot === 'string' && gitRoot !== '') {
+      const result = await runGit(['rev-parse', '--verify', String(options.baseRef)], gitRoot, {
+        timeoutMs: 5000,
+      });
+      baseRefOk = result.ok;
+    }
+  }
+
+  return { testRepoRootOk, baseRefOk };
+}
+
+/**
+ * @param {CycleState} state
+ * @param {{ testRepoRootOk: boolean, baseRefOk: boolean }} ioResults
  * @returns {Array<PreflightCheck>}
  */
-function preflightChecks(state) {
+function preflightChecks(state, { testRepoRootOk, baseRefOk }) {
   const options = state?.options || {};
   const providers = Array.isArray(options.providers) ? options.providers : [];
+
   return [
     check('providers', providers.length > 0, 'no providers resolved for this run'),
     check(
@@ -74,9 +116,24 @@ function preflightChecks(state) {
       ].join(' '),
     ),
     check(
+      'worktree-git-repo',
+      !options.worktree || Boolean(state?.context?.gitRoot),
+      '--worktree requires a git repo; run --worktree from inside a git working tree.',
+    ),
+    check(
+      'base-ref',
+      baseRefOk,
+      '--base-ref must resolve to a known git ref; check the value or fetch the ref before retrying.',
+    ),
+    check(
       'test-command',
       options.testCommand === undefined || typeof options.testCommand === 'string',
       '--test must be a shell command string',
+    ),
+    check(
+      'test-repo-root',
+      testRepoRootOk,
+      '--test requires a readable repo root; ensure the working directory is accessible.',
     ),
     check(
       'cycle-cap',

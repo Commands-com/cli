@@ -3,7 +3,6 @@ import {
   hasAnyFlag,
   projectCycleCommandOptions,
   resolveCycleCommandOptions,
-  stringOption,
 } from './command-options.js';
 import { COMMAND_OPTIONS } from './command-option-schema.js';
 import { resolveRuntimeOptions } from './config.js';
@@ -79,8 +78,13 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
 /**
  * Test seam for the assessment cycles loop.
  *
- * @typedef {Object} RunCycleWorkflowDependencies
- * @property {(state: CycleState, adapter: AssessmentCycleAdapter) => (void|Promise<void>)} [runAssessmentCycles]
+ * This is the cycle-workflow seam only: it lists exactly the keys
+ * `runCycleWorkflow` reads. Command-level adapters (review/quality) must NOT
+ * spread arbitrary keys through this bag — pass only the documented seams.
+ *
+ * @typedef {{
+ *   runAssessmentCycles?: (state: CycleState, adapter: AssessmentCycleAdapter) => (void|Promise<void>),
+ * }} RunCycleWorkflowDependencies
  */
 
 /**
@@ -212,7 +216,7 @@ export async function runCycleWorkflow(parsed, {
     const isolated = await createIsolatedWorktree(cwd, {
       kind,
       label,
-      baseRef: stringOption(parsed.flags, 'base-ref', 'HEAD'),
+      baseRef: options.baseRef || 'HEAD',
     });
     workspace = {
       mode: WORKSPACE_MODES.WORKTREE,

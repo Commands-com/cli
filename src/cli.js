@@ -44,6 +44,7 @@ Examples:
   commands-com room security "audit this CLI"
   commands-com doctor --ping --json
   commands-com runs list
+  commands-com runs show <run-id>
   commands-com doctor
 
 ${formatScopedOptionsHelp()}

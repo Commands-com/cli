@@ -185,249 +185,148 @@ async function writeStoredRunState(runDir, options) {
   );
 }
 
-test('runCycleWorkflow uses COMMANDS_COM_MODEL when no --model flag and no resume', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-model-env-only-'));
-  const originalCommandsComModel = process.env.COMMANDS_COM_MODEL;
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
-  try {
-    process.env.COMMANDS_COM_MODEL = 'env-model';
-    process.env.COMMANDS_COM_PROVIDER = 'mock';
-    delete process.env.COMMANDS_COM_PROVIDERS;
-
-    const captured = {};
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map(),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'model env only',
-      logger: noopLogger(),
-      adapter: {},
-      dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
-    });
-
-    assert.equal(state.options.model, 'env-model');
-    assert.equal(captured.options.model, 'env-model');
-  } finally {
-    if (originalCommandsComModel === undefined) delete process.env.COMMANDS_COM_MODEL;
-    else process.env.COMMANDS_COM_MODEL = originalCommandsComModel;
-    if (originalCommandsComProvider === undefined) delete process.env.COMMANDS_COM_PROVIDER;
-    else process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
+// Save/restore COMMANDS_COM_* env vars so each parametric case is independent.
+async function withEnvVars(setVars, fn) {
+  const keys = ['COMMANDS_COM_MODEL', 'COMMANDS_COM_PROVIDER', 'COMMANDS_COM_PROVIDERS', 'PATH'];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  for (const key of keys) {
+    if (Object.hasOwn(setVars, key)) {
+      const value = setVars[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
-});
-
-test('runCycleWorkflow lets --model flag override COMMANDS_COM_MODEL when no resume', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-model-cli-over-env-'));
-  const originalCommandsComModel = process.env.COMMANDS_COM_MODEL;
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
   try {
-    process.env.COMMANDS_COM_MODEL = 'env-model';
-    process.env.COMMANDS_COM_PROVIDER = 'mock';
-    delete process.env.COMMANDS_COM_PROVIDERS;
-
-    const captured = {};
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map([['model', 'cli-model']]),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'model cli over env',
-      logger: noopLogger(),
-      adapter: {},
-      dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
-    });
-
-    assert.equal(state.options.model, 'cli-model');
-    assert.equal(captured.options.model, 'cli-model');
+    return await fn();
   } finally {
-    if (originalCommandsComModel === undefined) delete process.env.COMMANDS_COM_MODEL;
-    else process.env.COMMANDS_COM_MODEL = originalCommandsComModel;
-    if (originalCommandsComProvider === undefined) delete process.env.COMMANDS_COM_PROVIDER;
-    else process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
-});
+}
 
-// Locks today's behaviour: stored resume model wins over COMMANDS_COM_MODEL
-// when no --model flag is passed. resolveCycleOptions sets options.model from
-// runtimeOptions (env), then mergeResumeOptions does { ...next, ...stored },
-// so stored.model overwrites it; --model is a resume-override field but only
-// restores nextOptions.model when the flag is explicit.
-test('runCycleWorkflow keeps stored resume model over COMMANDS_COM_MODEL when no --model flag', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-model-resume-over-env-'));
-  const originalPath = process.env.PATH;
-  const originalCommandsComModel = process.env.COMMANDS_COM_MODEL;
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
-  try {
-    const storedProviders = [{ id: 'mock', command: '/path/that/does/not/exist' }];
-    const runDir = path.join(cwd, 'stored-run');
-    await writeStoredRunState(runDir, { providers: storedProviders, model: 'stored-model' });
+// Each case asserts options precedence between env vars, --flags, and stored resume state.
+// `--test 'true'` is supplied so `runCyclePreflight` accepts the run; the test seam stubs
+// `runAssessmentCycles` before the test command would actually be invoked.
+const RUN_CYCLE_WORKFLOW_OPTION_CASES = [
+  {
+    name: 'runCycleWorkflow uses COMMANDS_COM_MODEL when no --model flag and no resume',
+    env: { COMMANDS_COM_MODEL: 'env-model', COMMANDS_COM_PROVIDER: 'mock', COMMANDS_COM_PROVIDERS: undefined },
+    flags: [['test', 'true']],
+    expect: { model: 'env-model' },
+  },
+  {
+    name: 'runCycleWorkflow lets --model flag override COMMANDS_COM_MODEL when no resume',
+    env: { COMMANDS_COM_MODEL: 'env-model', COMMANDS_COM_PROVIDER: 'mock', COMMANDS_COM_PROVIDERS: undefined },
+    flags: [['model', 'cli-model'], ['test', 'true']],
+    expect: { model: 'cli-model' },
+  },
+  {
+    // Locks today's behaviour: stored resume model wins over COMMANDS_COM_MODEL when no --model
+    // flag is passed. resolveCycleOptions sets options.model from runtimeOptions (env), then
+    // mergeResumeOptions overwrites it with stored.model; --model is a resume-override field
+    // but only restores nextOptions.model when the flag is explicit.
+    name: 'runCycleWorkflow keeps stored resume model over COMMANDS_COM_MODEL when no --model flag',
+    env: { PATH: '', COMMANDS_COM_MODEL: 'env-model', COMMANDS_COM_PROVIDER: undefined, COMMANDS_COM_PROVIDERS: undefined },
+    storedRunOptions: { providers: [{ id: 'mock', command: '/path/that/does/not/exist' }], model: 'stored-model' },
+    resumeFlag: true,
+    flags: [['test', 'true']],
+    expect: { model: 'stored-model' },
+  },
+  {
+    name: 'runCycleWorkflow lets explicit --model flag override stored resume model',
+    env: { PATH: '', COMMANDS_COM_MODEL: 'env-model', COMMANDS_COM_PROVIDER: undefined, COMMANDS_COM_PROVIDERS: undefined },
+    storedRunOptions: { providers: [{ id: 'mock', command: '/path/that/does/not/exist' }], model: 'stored-model' },
+    resumeFlag: true,
+    flags: [['model', 'cli-model'], ['test', 'true']],
+    expect: { model: 'cli-model' },
+  },
+  {
+    name: 'runCycleWorkflow uses COMMANDS_COM_PROVIDER when no --provider/--providers flag and no resume',
+    env: { COMMANDS_COM_PROVIDER: 'mock', COMMANDS_COM_PROVIDERS: undefined },
+    flags: [['test', 'true']],
+    expect: {
+      providerIds: ['mock'],
+      primaryProviderId: 'mock',
+      providersLength: 1,
+      firstProviderId: 'mock',
+    },
+  },
+  {
+    name: 'runCycleWorkflow on resume short-circuits to stored providers in a providerless environment',
+    env: { PATH: '', COMMANDS_COM_PROVIDER: undefined, COMMANDS_COM_PROVIDERS: undefined },
+    storedRunOptions: { providers: [{ id: 'mock', command: '/path/that/does/not/exist' }] },
+    resumeFlag: true,
+    flags: [['test', 'true']],
+    expect: {
+      providers: [{ id: 'mock', command: '/path/that/does/not/exist' }],
+      primaryProvider: { id: 'mock', command: '/path/that/does/not/exist' },
+      providerIds: ['mock'],
+      observedSameAsStateOptions: true,
+    },
+    assertResume: true,
+  },
+];
 
-    process.env.PATH = '';
-    process.env.COMMANDS_COM_MODEL = 'env-model';
-    delete process.env.COMMANDS_COM_PROVIDER;
-    delete process.env.COMMANDS_COM_PROVIDERS;
+for (const testCase of RUN_CYCLE_WORKFLOW_OPTION_CASES) {
+  test(testCase.name, async () => {
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-cycle-workflow-'));
+    try {
+      await withEnvVars(testCase.env, async () => {
+        const flags = new Map(/** @type {Array<[string, any]>} */ (testCase.flags));
+        if (testCase.storedRunOptions) {
+          const runDir = path.join(cwd, 'stored-run');
+          await writeStoredRunState(runDir, testCase.storedRunOptions);
+          flags.set('resume', runDir);
+        }
 
-    const captured = {};
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map([['resume', runDir]]),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'model resume over env',
-      logger: noopLogger(),
-      adapter: {},
-      dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
-    });
+        const captured = {};
+        const state = await runCycleWorkflow({
+          positionals: [],
+          flags,
+        }, {
+          cwd,
+          kind: 'review',
+          label: testCase.name,
+          logger: noopLogger(),
+          adapter: {},
+          dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
+        });
 
-    assert.equal(state.options.model, 'stored-model');
-    assert.equal(captured.options.model, 'stored-model');
-  } finally {
-    if (originalPath === undefined) delete process.env.PATH;
-    else process.env.PATH = originalPath;
-    if (originalCommandsComModel === undefined) delete process.env.COMMANDS_COM_MODEL;
-    else process.env.COMMANDS_COM_MODEL = originalCommandsComModel;
-    if (originalCommandsComProvider !== undefined) process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runCycleWorkflow lets explicit --model flag override stored resume model', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-model-cli-over-resume-'));
-  const originalPath = process.env.PATH;
-  const originalCommandsComModel = process.env.COMMANDS_COM_MODEL;
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
-  try {
-    const storedProviders = [{ id: 'mock', command: '/path/that/does/not/exist' }];
-    const runDir = path.join(cwd, 'stored-run');
-    await writeStoredRunState(runDir, { providers: storedProviders, model: 'stored-model' });
-
-    process.env.PATH = '';
-    process.env.COMMANDS_COM_MODEL = 'env-model';
-    delete process.env.COMMANDS_COM_PROVIDER;
-    delete process.env.COMMANDS_COM_PROVIDERS;
-
-    const captured = {};
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map([['resume', runDir], ['model', 'cli-model']]),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'model cli over resume',
-      logger: noopLogger(),
-      adapter: {},
-      dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
-    });
-
-    assert.equal(state.options.model, 'cli-model');
-    assert.equal(captured.options.model, 'cli-model');
-  } finally {
-    if (originalPath === undefined) delete process.env.PATH;
-    else process.env.PATH = originalPath;
-    if (originalCommandsComModel === undefined) delete process.env.COMMANDS_COM_MODEL;
-    else process.env.COMMANDS_COM_MODEL = originalCommandsComModel;
-    if (originalCommandsComProvider !== undefined) process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runCycleWorkflow uses COMMANDS_COM_PROVIDER when no --provider/--providers flag and no resume', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-provider-env-only-'));
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
-  try {
-    process.env.COMMANDS_COM_PROVIDER = 'mock';
-    delete process.env.COMMANDS_COM_PROVIDERS;
-
-    const captured = {};
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map(),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'provider env only',
-      logger: noopLogger(),
-      adapter: {},
-      dependencies: { runAssessmentCycles: noopRunAssessmentCycles(captured) },
-    });
-
-    assert.deepEqual(state.options.providerIds, ['mock']);
-    assert.equal(state.options.primaryProvider.id, 'mock');
-    assert.equal(state.options.providers.length, 1);
-    assert.equal(state.options.providers[0].id, 'mock');
-    assert.deepEqual(captured.options.providerIds, ['mock']);
-  } finally {
-    if (originalCommandsComProvider === undefined) delete process.env.COMMANDS_COM_PROVIDER;
-    else process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runCycleWorkflow on resume short-circuits to stored providers in a providerless environment', async () => {
-  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-resume-providerless-'));
-  const originalPath = process.env.PATH;
-  const originalCommandsComProvider = process.env.COMMANDS_COM_PROVIDER;
-  const originalCommandsComProviders = process.env.COMMANDS_COM_PROVIDERS;
-  try {
-    const storedProviders = [{ id: 'mock', command: '/path/that/does/not/exist' }];
-    const runDir = path.join(cwd, 'stored-run');
-    await fs.mkdir(runDir, { recursive: true });
-    await fs.writeFile(
-      path.join(runDir, 'run-state.json'),
-      `${JSON.stringify({
-        version: 1,
-        kind: 'review',
-        runId: path.basename(runDir),
-        cycles: [],
-        options: { providers: storedProviders },
-      }, null, 2)}\n`,
-      'utf8',
-    );
-
-    process.env.PATH = '';
-    delete process.env.COMMANDS_COM_PROVIDER;
-    delete process.env.COMMANDS_COM_PROVIDERS;
-
-    let observedOptions;
-    const state = await runCycleWorkflow({
-      positionals: [],
-      flags: new Map([['resume', runDir]]),
-    }, {
-      cwd,
-      kind: 'review',
-      label: 'resume providerless',
-      logger: { info() {}, warn() {}, error() {} },
-      adapter: {},
-      dependencies: {
-        runAssessmentCycles: async (runState) => { observedOptions = runState.options; },
-      },
-    });
-
-    assert.deepEqual(state.options.providers, storedProviders);
-    assert.deepEqual(state.options.primaryProvider, storedProviders[0]);
-    assert.deepEqual(state.options.providerIds, ['mock']);
-    assert.equal(state.options.resume, runDir);
-    assert.equal(observedOptions, state.options);
-  } finally {
-    if (originalPath === undefined) delete process.env.PATH;
-    else process.env.PATH = originalPath;
-    if (originalCommandsComProvider !== undefined) process.env.COMMANDS_COM_PROVIDER = originalCommandsComProvider;
-    if (originalCommandsComProviders !== undefined) process.env.COMMANDS_COM_PROVIDERS = originalCommandsComProviders;
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
+        const { expect } = testCase;
+        if (expect.model !== undefined) {
+          assert.equal(state.options.model, expect.model);
+          assert.equal(captured.options.model, expect.model);
+        }
+        if (expect.providerIds !== undefined) {
+          assert.deepEqual(state.options.providerIds, expect.providerIds);
+          assert.deepEqual(captured.options.providerIds, expect.providerIds);
+        }
+        if (expect.primaryProviderId !== undefined) {
+          assert.equal(state.options.primaryProvider.id, expect.primaryProviderId);
+        }
+        if (expect.providersLength !== undefined) {
+          assert.equal(state.options.providers.length, expect.providersLength);
+        }
+        if (expect.firstProviderId !== undefined) {
+          assert.equal(state.options.providers[0].id, expect.firstProviderId);
+        }
+        if (expect.providers !== undefined) {
+          assert.deepEqual(state.options.providers, expect.providers);
+        }
+        if (expect.primaryProvider !== undefined) {
+          assert.deepEqual(state.options.primaryProvider, expect.primaryProvider);
+        }
+        if (expect.observedSameAsStateOptions) {
+          assert.equal(captured.options, state.options);
+        }
+        if (testCase.assertResume) {
+          assert.equal(state.options.resume, flags.get('resume'));
+        }
+      });
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+}

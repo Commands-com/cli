@@ -6,11 +6,6 @@ import {
   OPTION_SCOPES,
   SCOPED_OPTION_COMMANDS,
 } from './command-option-schema.js';
-import {
-  OPTION_READER_NAMES,
-  OPTION_RESOLVER,
-  OPTION_RESOLVER_FIELD_GROUP,
-} from './command-option-resolvers.js';
 import { REGISTERED_DISPATCH_NAMES } from './command-registry.js';
 import { UsageError } from './errors.js';
 import { SCORE_ORDER } from './summary-contract.js';
@@ -26,28 +21,14 @@ function optionsForScope(scopeName) {
   return COMMAND_OPTIONS.filter((option) => option.scopes.includes(scopeName));
 }
 
-function optionValue(flags, name, fallback = '') {
+export function stringOption(flags, name, fallback = '') {
   const value = normalizeFlags(flags).get(name);
   if (!isReadableOptionValue(value)) return fallback;
   return String(value);
 }
 
-export function stringOption(flags, name, fallback = '') {
-  return optionValue(flags, name, fallback);
-}
-
 function booleanOption(flags, name) {
   return normalizeFlags(flags).has(name);
-}
-
-function splitList(value, fallback = []) {
-  const source = String(value || '').trim();
-  if (!source) return fallback;
-  const items = source
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean);
-  return items.length ? items : fallback;
 }
 
 function readNumericFlagState(flags, name) {
@@ -96,7 +77,10 @@ function nonNegativeIntegerOption(flags, name, fallback, opts) {
 }
 
 export function listOption(flags, name, fallback = []) {
-  return splitList(stringOption(flags, name, ''), fallback);
+  const source = stringOption(flags, name, '').trim();
+  if (!source) return fallback;
+  const items = source.split(',').map((item) => item.trim()).filter(Boolean);
+  return items.length ? items : fallback;
 }
 
 export function hasFlag(flags, name) {
@@ -115,14 +99,8 @@ function strictInteger(value) {
   return Number.isSafeInteger(parsed) ? parsed : undefined;
 }
 
-function flagNamesForScope(scopeName, { includeAliases = true } = {}) {
-  return optionsForScope(scopeName).flatMap((option) => (
-    includeAliases ? [option.name, ...option.aliases] : [option.name]
-  ));
-}
-
-function isKnownCommand(command) {
-  return KNOWN_COMMAND_SET.has(command);
+function flagNamesForScope(scopeName) {
+  return optionsForScope(scopeName).flatMap((option) => [option.name, ...option.aliases]);
 }
 
 function optionForFlagName(flagName) {
@@ -131,39 +109,23 @@ function optionForFlagName(flagName) {
   )) || null;
 }
 
-export function readCommandOptionValue(flags, nameOrAlias, fallback) {
-  const option = optionForFlagName(nameOrAlias);
-  if (!option) {
-    throw new Error(`unknown command option: --${nameOrAlias}`);
-  }
-  const reader = COMMAND_OPTION_READER_FUNCTIONS[option.readWith];
-  if (!reader) {
-    throw new Error(`unknown option reader for --${option.name}: ${option.readWith}`);
-  }
-  const normalizedFlags = normalizeFlags(flags);
-  const readName = firstReadableOptionName(normalizedFlags, option, nameOrAlias);
-  return reader(normalizedFlags, readName, fallback, { max: option.max });
-}
-
-function optionReadNames(option, preferredName) {
-  return [...new Set([preferredName, option.name, ...option.aliases].filter(Boolean))];
-}
-
-const COMMAND_OPTION_READER_FUNCTIONS = Object.freeze({
+const OPTION_READERS = Object.freeze({
   stringOption,
   booleanOption: (flags, name, fallback) => booleanOption(flags, name) || Boolean(fallback),
   positiveIntegerOption,
   nonNegativeIntegerOption,
   listOption,
 });
-assertOptionReadersRegistered(COMMAND_OPTION_READER_FUNCTIONS);
 
-function assertOptionReadersRegistered(readers) {
-  for (const name of OPTION_READER_NAMES) {
-    if (typeof readers[name] !== 'function') {
-      throw new Error(`missing command option reader: ${name}`);
-    }
+export function readCommandOptionValue(flags, nameOrAlias, fallback) {
+  const option = optionForFlagName(nameOrAlias);
+  if (!option) {
+    throw new Error(`unknown command option: --${nameOrAlias}`);
   }
+  const reader = OPTION_READERS[option.readWith];
+  const normalizedFlags = normalizeFlags(flags);
+  const readName = firstReadableOptionName(normalizedFlags, option, nameOrAlias);
+  return reader(normalizedFlags, readName, fallback, { max: option.max });
 }
 
 export function normalizeFlags(flags) {
@@ -171,14 +133,11 @@ export function normalizeFlags(flags) {
   return new Map(Object.entries(flags || {}));
 }
 
-function firstPresentOptionName(flags, names) {
-  return names.find((name) => flags.has(name)) || names[0];
-}
-
 function firstReadableOptionName(flags, option, preferredName) {
-  const names = optionReadNames(option, preferredName);
-  if (!option.value) return firstPresentOptionName(flags, names);
-  return names.find((name) => isReadableOptionValue(flags.get(name))) || firstPresentOptionName(flags, names);
+  const names = [...new Set([preferredName, option.name, ...option.aliases].filter(Boolean))];
+  const fallback = names.find((name) => flags.has(name)) || names[0];
+  if (!option.value) return fallback;
+  return names.find((name) => isReadableOptionValue(flags.get(name))) || fallback;
 }
 
 function isReadableOptionValue(value) {
@@ -190,23 +149,21 @@ function isCommonOrHelpFlag(flagName) {
   return HELP_FLAGS.has(flagName) || Boolean(option?.scopes.includes(COMMON));
 }
 
-function allowedFlagNamesForCommand(command, { includeAliases = true } = {}) {
-  const allowed = new Set(flagNamesForScope(COMMON, { includeAliases }));
+function allowedFlagNamesForCommand(command) {
+  const allowed = new Set(flagNamesForScope(COMMON));
   if (HELP_COMMAND_SET.has(command)) {
     for (const flag of HELP_FLAG_NAMES) allowed.add(flag);
   }
   if (SCOPED_OPTION_COMMAND_SET.has(command)) {
-    for (const flag of flagNamesForScope(command, { includeAliases })) {
-      allowed.add(flag);
-    }
+    for (const flag of flagNamesForScope(command)) allowed.add(flag);
   }
-  return [...allowed];
+  return allowed;
 }
 
 export function validateFlagsForCommand(command, flags) {
   const flagNames = [...normalizeFlags(flags).keys()];
-  const isKnown = isKnownCommand(command);
-  const allowed = new Set(allowedFlagNamesForCommand(command));
+  const isKnown = KNOWN_COMMAND_SET.has(command);
+  const allowed = allowedFlagNamesForCommand(command);
 
   for (const flag of flagNames) {
     if (!ALL_FLAGS.has(flag) && !HELP_FLAGS.has(flag)) {
@@ -222,52 +179,34 @@ export function validateFlagsForCommand(command, flags) {
   }
 }
 
-function formatOptionUsage(option) {
-  return `--${option.name}${option.value ? ` ${option.value}` : ''}`;
-}
-
-function formatOptionsHelp(options) {
-  if (!options.length) return '';
-  const rows = options.map((option) => [formatOptionUsage(option), option.description]);
-  const width = Math.max(...rows.map(([usage]) => usage.length));
-  return rows
-    .map(([usage, description]) => `  ${usage.padEnd(width)} ${description}`)
-    .join('\n');
-}
-
-function formatOptionsHelpForScope(scopeName) {
-  return formatOptionsHelp(optionsForScope(scopeName));
-}
-
 export function formatScopedOptionsHelp(scopes = OPTION_SCOPES) {
-  return scopes
-    .map((scope) => `${scope.title}:\n${formatOptionsHelpForScope(scope.name)}`)
-    .join('\n\n');
+  return scopes.map((scope) => {
+    const options = optionsForScope(scope.name);
+    if (!options.length) return `${scope.title}:\n`;
+    const rows = options.map((option) => [
+      `--${option.name}${option.value ? ` ${option.value}` : ''}`,
+      option.description,
+    ]);
+    const width = Math.max(...rows.map(([usage]) => usage.length));
+    const body = rows
+      .map(([usage, description]) => `  ${usage.padEnd(width)} ${description}`)
+      .join('\n');
+    return `${scope.title}:\n${body}`;
+  }).join('\n\n');
 }
 
-const {
-  CYCLE: CYCLE_RESOLVER,
-  ROOM: ROOM_RESOLVER,
-} = OPTION_RESOLVER;
+const CYCLE_SHARED_WORKFLOW_OPTION_FIELDS = fieldsFor('cycle', 'sharedWorkflow');
+const ROOM_SHARED_WORKFLOW_OPTION_FIELDS = fieldsFor('room', 'sharedWorkflow');
+const CYCLE_COMMAND_OPTION_FIELDS = fieldsFor('cycle', 'cycleCommand');
+const ROOM_COMMAND_OPTION_FIELDS = fieldsFor('room', 'roomCommand');
+const CYCLE_FANOUT_MODE_OPTION_FIELDS = fieldsFor('cycle', 'fanoutMode');
+const ROOM_FANOUT_MODE_OPTION_FIELDS = fieldsFor('room', 'fanoutMode');
 
-const {
-  SHARED_WORKFLOW,
-  CYCLE_COMMAND,
-  FANOUT_MODE,
-  ROOM_COMMAND,
-} = OPTION_RESOLVER_FIELD_GROUP;
-
-const CYCLE_OPTION_FIELDS = fieldsForResolver(CYCLE_RESOLVER);
-const ROOM_OPTION_FIELDS = fieldsForResolver(ROOM_RESOLVER);
-
-const CYCLE_SHARED_WORKFLOW_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, SHARED_WORKFLOW);
-const ROOM_SHARED_WORKFLOW_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, SHARED_WORKFLOW);
-const CYCLE_COMMAND_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, CYCLE_COMMAND);
-const ROOM_COMMAND_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, ROOM_COMMAND);
-const CYCLE_FANOUT_MODE_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, FANOUT_MODE);
-const ROOM_FANOUT_MODE_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, FANOUT_MODE);
-
-const CYCLE_FIELD_NAMES = Object.freeze([...new Set(CYCLE_OPTION_FIELDS.map((field) => field.field))]);
+const CYCLE_FIELD_NAMES = Object.freeze([...new Set(
+  COMMAND_OPTIONS.flatMap((option) => option.resolve
+    .filter((entry) => entry.resolver === 'cycle')
+    .map((entry) => entry.field)),
+)]);
 
 // Fields a stored cycle run is allowed to carry into a resume merge: the cycle
 // resolver's own fields plus any field that any option declares as a
@@ -279,32 +218,28 @@ const KNOWN_STORED_CYCLE_FIELDS = Object.freeze(new Set([
   ...COMMAND_OPTIONS.flatMap((option) => option.resumeOverrideFields ?? []),
 ]));
 
+/** @returns {Record<string, any>} */
 export function resolveCycleCommandOptions(flags) {
   const cycleOptions = resolveOptionFields(flags, CYCLE_COMMAND_OPTION_FIELDS);
-  const mode = resolveFanoutMode(flags, {
-    defaultParallel: true,
-    allowSerial: true,
-  });
+  const mode = resolveFanoutMode(flags, CYCLE_FANOUT_MODE_OPTION_FIELDS, { defaultParallel: true });
 
-  return normalizeCycleCommandOptions({
+  return {
     ...resolveOptionFields(flags, CYCLE_SHARED_WORKFLOW_OPTION_FIELDS),
     ...cycleOptions,
     ...mode,
-  });
+    untilScore: normalizeUntilScore(cycleOptions.untilScore),
+  };
 }
 
+/** @returns {Record<string, any>} */
 export function resolveRoomCommandOptions(flags, {
   participantCount = 0,
   json = false,
 } = {}) {
   const participantFallback = Math.max(0, participantCount);
   const roomOptions = resolveOptionFields(flags, ROOM_COMMAND_OPTION_FIELDS, { participantFallback });
-  const requestedLimit = roomOptions.requestedParticipantLimit;
-  const participantLimit = Math.min(requestedLimit, participantFallback);
-  const mode = resolveFanoutMode(flags, {
-    defaultParallel: false,
-    allowSerial: false,
-  });
+  const participantLimit = Math.min(roomOptions.requestedParticipantLimit, participantFallback);
+  const mode = resolveFanoutMode(flags, ROOM_FANOUT_MODE_OPTION_FIELDS, { defaultParallel: false });
 
   return {
     ...resolveOptionFields(flags, ROOM_SHARED_WORKFLOW_OPTION_FIELDS),
@@ -344,8 +279,7 @@ export function filterKnownStoredCycleOptions(storedOptions, { logger } = {}) {
   return known;
 }
 
-function resolveFanoutMode(flags, { defaultParallel = false, allowSerial = true } = {}) {
-  const fields = allowSerial ? CYCLE_FANOUT_MODE_OPTION_FIELDS : ROOM_FANOUT_MODE_OPTION_FIELDS;
+function resolveFanoutMode(flags, fields, { defaultParallel }) {
   const { serial = false, parallel = false } = resolveOptionFields(flags, fields);
   return {
     serial,
@@ -356,38 +290,22 @@ function resolveFanoutMode(flags, { defaultParallel = false, allowSerial = true 
 function resolveOptionFields(flags, fields, context = {}) {
   const options = {};
   for (const field of fields) {
-    const fallback = resolveOptionFallback(field.fallback, { ...context, options });
+    const fallback = typeof field.fallback === 'function'
+      ? field.fallback({ ...context, options })
+      : field.fallback;
     options[field.field] = readCommandOptionValue(flags, field.option, fallback);
   }
   return options;
 }
 
-function resolveOptionFallback(fallback, context) {
-  return typeof fallback === 'function' ? fallback(context) : fallback;
-}
-
-function fieldsForResolver(resolver) {
-  return Object.freeze(COMMAND_OPTIONS.flatMap((option) => (
-    option.resolve
-      .filter((field) => field.resolver === resolver)
-      .map((field) => Object.freeze({
-        option: option.name,
-        field: field.field,
-        fallback: field.fallback,
-        group: field.group,
-      }))
-  )));
-}
-
-function fieldsForGroup(fields, group) {
-  return Object.freeze(fields.filter((field) => field.group === group));
-}
-
-function normalizeCycleCommandOptions(options) {
-  return {
-    ...options,
-    untilScore: normalizeUntilScore(options.untilScore),
-  };
+function fieldsFor(resolver, group) {
+  return Object.freeze(COMMAND_OPTIONS.flatMap((option) => option.resolve
+    .filter((entry) => entry.resolver === resolver && entry.group === group)
+    .map((entry) => Object.freeze({
+      option: option.name,
+      field: entry.field,
+      fallback: entry.fallback,
+    }))));
 }
 
 function normalizeUntilScore(value) {

@@ -9,7 +9,6 @@ import {
   captureCommandResultLogs as captureLogs,
   captureWorkflowCommand as captureCommand,
 } from './support/workflow-fixtures.js';
-
 import {
   parsed,
   tempDir,
@@ -25,7 +24,6 @@ const REVIEW = {
   flags: { reviewers: 'correctness' },
   synthesisKind: 'review-synthesis',
   positionals: (title) => [title],
-  scoreField: 'cycles[0].score',
 };
 const QUALITY = {
   label: 'runQualityCommand',
@@ -48,6 +46,76 @@ async function withCodexBin(cwd, setup) {
   const binDir = path.join(cwd, 'bin');
   await setup(binDir);
   return { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } };
+}
+
+function yamlBlock(fields, body) {
+  const lines = ['```yaml'];
+  for (const [key, value] of Object.entries(fields)) {
+    lines.push(`${key}: ${value}`);
+  }
+  lines.push('```', '', body);
+  return lines.join('\n');
+}
+
+function scoreText(score, issueCount, summary) {
+  const body = issueCount > 0
+    ? 'The body still describes one actionable issue.'
+    : 'The body confirms there are no actionable issues.';
+  return yamlBlock({
+    score,
+    verdict: issueCount > 0 ? 'issues' : 'clean',
+    issue_count: issueCount,
+    summary,
+  }, body);
+}
+
+function unresolvedScoreAText(summary) { return scoreText('A', 1, summary); }
+function unresolvedScoreBText(summary) { return scoreText('B', 1, summary); }
+
+function providerMessage(text) {
+  return JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text } });
+}
+
+async function writeAssessmentInvariantCodex(binDir, { synthesisKind, summaryText }) {
+  await fs.mkdir(binDir, { recursive: true });
+  const provider = path.join(binDir, 'codex');
+  const implementationPlan = [
+    '```json',
+    JSON.stringify({
+      tasks: [
+        {
+          id: 'task-1',
+          title: 'No-op invariant task',
+          files: [],
+          instructions: 'Do not change files for this invariant regression.',
+        },
+      ],
+    }, null, 2),
+    '```',
+  ].join('\n');
+  await fs.writeFile(
+    provider,
+    [
+      '#!/bin/sh',
+      'prompt=$(cat)',
+      'if printf \'%s\\n\' "$prompt" | grep -q \'"kind":"implementation-plan"\'; then',
+      `  printf '%s\\n' '${providerMessage(implementationPlan)}'`,
+      '  exit 0',
+      'fi',
+      'if printf \'%s\\n\' "$prompt" | grep -q \'"kind":"implementation-task"\'; then',
+      `  printf '%s\\n' '${providerMessage('No-op implementation for invariant regression.')}'`,
+      '  exit 0',
+      'fi',
+      `if printf '%s\\n' "$prompt" | grep -q '"kind":"${synthesisKind}"'; then`,
+      `  printf '%s\\n' '${providerMessage(summaryText)}'`,
+      '  exit 0',
+      'fi',
+      `printf '%s\\n' '${providerMessage(summaryText)}'`,
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  await fs.chmod(provider, 0o755);
 }
 
 test('runReviewCommand JSON contract includes report path and content', async () => {
@@ -239,45 +307,81 @@ for (const command of [REVIEW, QUALITY]) {
       assert.equal(finalSummary.cycles, 1);
     });
   });
+
+  test(`${command.label} --until A fails when synthesis reports score A with issues`, SKIP_WIN, async () => {
+    await withTempCwd(async (cwd) => {
+      const summaryText = unresolvedScoreAText(`${command.label} synthesis kept an issue with score A.`);
+      const env = await withCodexBin(cwd, (binDir) => writeAssessmentInvariantCodex(binDir, {
+        synthesisKind: command.synthesisKind,
+        summaryText,
+      }));
+
+      const result = await captureCommand(
+        command.run,
+        parsed(command.positionals('until invariant'), {
+          provider: 'codex',
+          ...command.flags,
+          json: 'true',
+          until: 'A',
+          'max-cycles': '1',
+          'max-implementers': '1',
+          retries: '0',
+        }),
+        cwd,
+        env,
+      );
+      const output = JSON.parse(result.stdout);
+      const finalSummary = JSON.parse(await fs.readFile(output.finalSummaryPath, 'utf8'));
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(output.score, 'B');
+      assert.equal(output.issueCount, 1);
+      assert.equal(output.final.status, 'issues');
+      assert.equal(finalSummary.status, 'issues');
+      assert.equal(finalSummary.final.score, 'B');
+    });
+  });
 }
 
 test('unresolved validation failure keeps a clean quality cycle fixable', async () => {
-  const cleanCycle = {
-    score: 'A',
-    issueCount: 0,
-    providerIssueCount: 0,
-    synopsis: 'Quality is clean but validation is still failing.',
-    outputs: [],
-  };
-  let fixable = false;
-
-  await captureLogs(() => runQualityCommand(parsed([], { area: 'maintainability', json: 'true' }), {
-    cwd: '/unit/repo',
-    dependencies: {
-      runCycleWorkflow: async (_actualParsed, options) => {
-        const state = {
-          kind: 'quality',
-          store: { runId: 'quality-validation-failure', async write(name) { return `/unit/${name}`; } },
-          options: { providerIds: ['unit'], primaryProvider: { id: 'unit' }, model: '', json: true, fix: true },
-          context: { repoRoot: '/unit/repo', branch: 'main', status: '', diffStat: '', diff: '' },
-          workspace: { mode: 'current', cwd: '/unit/repo' },
-          logger: options.logger,
-          cycles: [],
-          priorFindings: '',
-          hasUnresolvedTestFailure: true,
-          stopReason: '',
-        };
-        const runContext = createCycleRunContext(state);
-        fixable = options.adapter.hasFixableIssues({
-          runContext, cycle: 1, context: state.context, cycleRecord: cleanCycle,
-        });
-        state.cycles.push({ cycle: 1, ...cleanCycle });
-        return state;
+  const cwd = await tempDir();
+  try {
+    let fixable;
+    await captureLogs(() => runQualityCommand(
+      parsed([], {
+        provider: 'mock',
+        area: 'maintainability',
+        json: 'true',
+        test: 'true',
+      }),
+      {
+        cwd,
+        dependencies: {
+          runAssessmentCycles: async (state, adapter) => {
+            state.hasUnresolvedTestFailure = true;
+            const cleanCycle = {
+              cycle: 1,
+              score: 'A',
+              issueCount: 0,
+              providerIssueCount: 0,
+              synopsis: 'Quality is clean but validation is still failing.',
+              outputs: [],
+            };
+            fixable = adapter.hasFixableIssues({
+              runContext: createCycleRunContext(state),
+              cycle: 1,
+              context: state.context,
+              cycleRecord: cleanCycle,
+            });
+            state.cycles.push(cleanCycle);
+          },
+        },
       },
-    },
-  }));
-
-  assert.equal(fixable, true);
+    ));
+    assert.equal(fixable, true);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
 });
 
 const SUMMARIZE_CASES = [
@@ -310,7 +414,7 @@ const SUMMARIZE_CASES = [
     assertions: ({ output, cycle }) => {
       assert.equal(output.score, 'D');
       assert.equal(output.issueCount, 4);
-      assert.equal(output.synopsis, '4 issues across 1 area. maintainability: D, 4 issues - Provider output found four maintainability issues.');
+      assert.equal(output.synopsis, '4 issues across 1 provider audit. codex: maintainability: D, 4 issues - Provider output found four maintainability issues.');
       assert.equal(cycle.providerIssueCount, 4);
       assert.equal(cycle.outputs[0].score, 'D');
       assert.equal(cycle.outputs[0].issueCount, 4);
@@ -371,7 +475,7 @@ const BLANK_SYNTHESIS_CASES = [
     assertions: ({ output, cycle }) => {
       assert.equal(output.score, 'D');
       assert.equal(output.issueCount, 4);
-      assert.equal(output.synopsis, '4 issues across 1 area. maintainability: D, 4 issues - Provider output found four maintainability issues.');
+      assert.equal(output.synopsis, '4 issues across 1 provider audit. codex: maintainability: D, 4 issues - Provider output found four maintainability issues.');
       assert.equal(cycle.providerIssueCount, 4);
       assert.equal(cycle.outputs[0].issueCount, 4);
       assert.equal(cycle.synthesis.trim(), '');
@@ -427,7 +531,7 @@ test('runQualityCommand report output remains stable for a single mock area', as
       'Workspace mode: current',
       'Score: B',
       'Issue count: 1',
-      'Synopsis: 1 issue across 1 area. maintainability: B, 1 issue - One mock quality issue was found in this area.',
+      'Synopsis: 1 issue across 1 provider audit. mock: maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '',
       '',
       '',
@@ -437,7 +541,7 @@ test('runQualityCommand report output remains stable for a single mock area', as
       'Score: B',
       'Issue count: 1',
       'Provider issue count: 1',
-      'Synopsis: 1 issue across 1 area. maintainability: B, 1 issue - One mock quality issue was found in this area.',
+      'Synopsis: 1 issue across 1 provider audit. mock: maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '### mock / maintainability',
       '',
       '```yaml',
@@ -452,109 +556,3 @@ test('runQualityCommand report output remains stable for a single mock area', as
     ].join('\n'));
   });
 });
-
-for (const command of [REVIEW, QUALITY]) {
-  test(`${command.label} --until A fails when synthesis reports score A with issues`, SKIP_WIN, async () => {
-    await withTempCwd(async (cwd) => {
-      const summaryText = unresolvedScoreAText(`${command.label} synthesis kept an issue with score A.`);
-      const env = await withCodexBin(cwd, (binDir) => writeAssessmentInvariantCodex(binDir, {
-        synthesisKind: command.synthesisKind,
-        summaryText,
-      }));
-
-      const result = await captureCommand(
-        command.run,
-        parsed(command.positionals('until invariant'), {
-          provider: 'codex',
-          ...command.flags,
-          json: 'true',
-          until: 'A',
-          'max-cycles': '1',
-          'max-implementers': '1',
-          retries: '0',
-        }),
-        cwd,
-        env,
-      );
-      const output = JSON.parse(result.stdout);
-      const finalSummary = JSON.parse(await fs.readFile(output.finalSummaryPath, 'utf8'));
-
-      assert.equal(result.exitCode, 1);
-      assert.equal(output.score, 'B');
-      assert.equal(output.issueCount, 1);
-      assert.equal(output.final.status, 'issues');
-      assert.equal(finalSummary.status, 'issues');
-      assert.equal(finalSummary.final.score, 'B');
-    });
-  });
-}
-
-function yamlBlock(fields, body) {
-  const lines = ['```yaml'];
-  for (const [key, value] of Object.entries(fields)) {
-    lines.push(`${key}: ${value}`);
-  }
-  lines.push('```', '', body);
-  return lines.join('\n');
-}
-
-function scoreText(score, issueCount, summary) {
-  const body = issueCount > 0
-    ? 'The body still describes one actionable issue.'
-    : 'The body confirms there are no actionable issues.';
-  return yamlBlock({
-    score,
-    verdict: issueCount > 0 ? 'issues' : 'clean',
-    issue_count: issueCount,
-    summary,
-  }, body);
-}
-
-function unresolvedScoreAText(summary) { return scoreText('A', 1, summary); }
-function unresolvedScoreBText(summary) { return scoreText('B', 1, summary); }
-
-async function writeAssessmentInvariantCodex(binDir, { synthesisKind, summaryText }) {
-  await fs.mkdir(binDir, { recursive: true });
-  const provider = path.join(binDir, 'codex');
-  const implementationPlan = [
-    '```json',
-    JSON.stringify({
-      tasks: [
-        {
-          id: 'task-1',
-          title: 'No-op invariant task',
-          files: [],
-          instructions: 'Do not change files for this invariant regression.',
-        },
-      ],
-    }, null, 2),
-    '```',
-  ].join('\n');
-  await fs.writeFile(
-    provider,
-    [
-      '#!/bin/sh',
-      'prompt=$(cat)',
-      'if printf \'%s\\n\' "$prompt" | grep -q \'"kind":"implementation-plan"\'; then',
-      `  printf '%s\\n' '${providerMessage(implementationPlan)}'`,
-      '  exit 0',
-      'fi',
-      'if printf \'%s\\n\' "$prompt" | grep -q \'"kind":"implementation-task"\'; then',
-      `  printf '%s\\n' '${providerMessage('No-op implementation for invariant regression.')}'`,
-      '  exit 0',
-      'fi',
-      `if printf '%s\\n' "$prompt" | grep -q '"kind":"${synthesisKind}"'; then`,
-      `  printf '%s\\n' '${providerMessage(summaryText)}'`,
-      '  exit 0',
-      'fi',
-      `printf '%s\\n' '${providerMessage(summaryText)}'`,
-      '',
-    ].join('\n'),
-    'utf8',
-  );
-  await fs.chmod(provider, 0o755);
-}
-
-function providerMessage(text) {
-  return JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text } });
-}

@@ -57,18 +57,10 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
  */
 
 /**
- * Test seam dependencies accepted by `runQualityCommand`. The bag may carry an
- * override for `runCycleWorkflow` itself; remaining fields are spread into the
- * inner workflow's own `dependencies` (see `RunCycleWorkflowDependencies`).
- *
- * @typedef {RunCycleWorkflowDependencies & { runCycleWorkflow?: typeof runCycleWorkflow }} RunQualityCommandDependencies
- */
-
-/**
  * @typedef {object} RunQualityCommandArgs
  * @property {string} cwd Command working directory.
  * @property {CycleLogger} [logger] Optional logger override (defaults to a quality logger).
- * @property {RunQualityCommandDependencies} [dependencies] Optional test seam.
+ * @property {RunCycleWorkflowDependencies} [dependencies] Optional test seam forwarded to the cycle workflow.
  */
 
 /**
@@ -78,9 +70,8 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
 export async function runQualityCommand(parsed, { cwd, logger = createCommandLogger(parsed, { kind: 'quality' }), dependencies = {} }) {
   const descriptors = await resolveQualityAreaDescriptors(parsed, cwd);
   const areas = descriptors.map((descriptor) => descriptor.value);
-  const { runCycleWorkflow: workflow = runCycleWorkflow, ...workflowDeps } = dependencies;
 
-  const state = await workflow(parsed, {
+  const state = await runCycleWorkflow(parsed, {
     cwd,
     kind: 'quality',
     label: areas.join('-'),
@@ -89,7 +80,7 @@ export async function runQualityCommand(parsed, { cwd, logger = createCommandLog
     },
     logger,
     adapter: createQualityAssessmentAdapter({ areas, descriptors }),
-    dependencies: workflowDeps,
+    dependencies,
   });
 
   return completeAssessmentCommandRun({
@@ -119,7 +110,11 @@ async function loadQualityAreas(parsed, cwd) {
 }
 
 function createQualityAssessmentAdapter({ areas, descriptors }) {
-  const auditItems = createQualityAuditItems(descriptors);
+  const auditItems = descriptors.length === 0 ? [] : [{
+    value: descriptors.map((descriptor) => String(descriptor.value)),
+    label: descriptors.map((descriptor) => descriptor.label).join(', '),
+    pathSegment: descriptors.length === 1 ? descriptors[0].pathSegment : 'all-areas',
+  }];
   return {
     findingsTitle: 'Provider outputs',
     synthesisFallbackDescription: 'provider summaries',
@@ -203,20 +198,11 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
         runContext.logger.info(`cycle ${cycle} synopsis: ${cycleRecord.synopsis}`);
       }
     },
-    implementation({ cycleRecord }) {
+    implementation() {
       return {
         objective: `Improve code quality for areas: ${areas.join(', ')}`,
         testFailureUpdates: { score: 'F' },
       };
     },
   };
-}
-
-function createQualityAuditItems(descriptors) {
-  if (descriptors.length === 0) return [];
-  return [{
-    value: descriptors.map((descriptor) => String(descriptor.value)),
-    label: descriptors.map((descriptor) => descriptor.label).join(', '),
-    pathSegment: descriptors.length === 1 ? descriptors[0].pathSegment : 'all-areas',
-  }];
 }

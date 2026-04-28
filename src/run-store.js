@@ -292,12 +292,12 @@ async function assertRunDirectory(dir, displayRef) {
 /**
  * @param {string} cwd
  * @param {{
- *   kind?: string,
- *   label?: string,
+ *   kind: string,
+ *   label: string,
  *   changed?: boolean,
  *   metadata?: RunMetadata,
  *   writeSetupArtifacts?: boolean,
- * }} [options]
+ * }} options
  * @returns {Promise<PreparedRun>}
  */
 export async function prepareRun(cwd, {
@@ -306,7 +306,13 @@ export async function prepareRun(cwd, {
   changed = false,
   metadata = {},
   writeSetupArtifacts = true,
-} = {}) {
+}) {
+  if (typeof kind !== 'string' || kind.trim() === '') {
+    throw new Error('prepareRun: kind must be a non-empty string');
+  }
+  if (typeof label !== 'string' || label.trim() === '') {
+    throw new Error('prepareRun: label must be a non-empty string');
+  }
   const store = await createRunStore(cwd, kind, label);
   const context = await collectRepoContext(cwd, { changed });
   if (writeSetupArtifacts) {

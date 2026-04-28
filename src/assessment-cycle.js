@@ -44,6 +44,9 @@ import { writeRunState } from './run-state.js';
  * @typedef {object} AssessmentCycleProviderOutput
  * @property {string} provider Provider id that produced this output.
  * @property {string} text Raw provider text.
+ * @property {string} [role] Review role label.
+ * @property {string} [area] Quality area label.
+ * @property {Array<string>} [areas] Quality area list.
  * @property {string} [score] Parsed score, when present.
  * @property {number} [issueCount] Parsed issue count, when present.
  * @property {string} [synopsis] Parsed synopsis, when present.
@@ -128,13 +131,28 @@ import { writeRunState } from './run-state.js';
  */
 
 /**
- * Fresh per-cycle context shared with `logCycleStart` and `fanout` hooks (and
- * returned by `createAssessmentCycleContext`).
+ * Base per-cycle context shared with every adapter hook.
  *
  * @typedef {object} AssessmentCycleContext
  * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
  * @property {number} cycle One-based cycle number.
  * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ */
+
+/**
+ * Per-cycle context passed to post-record hooks (`hasFixableIssues`,
+ * `afterCycle`, `implementation`) once fan-out, synthesis, and the cycle
+ * record have run.
+ *
+ * @typedef {AssessmentCycleContext & {
+ *   outputs?: Array<AssessmentCycleProviderOutput>,
+ *   outputSummary?: AssessmentCycleSummary,
+ *   cycleSummary?: AssessmentCycleSummary,
+ *   cycleRecord?: CycleRecord,
+ *   synthesisProvider?: string,
+ *   synthesisText?: string,
+ *   synthesisError?: string,
+ * }} AssessmentCyclePostRecordContext
  */
 
 /**
@@ -175,32 +193,6 @@ import { writeRunState } from './run-state.js';
  */
 
 /**
- * Args passed to post-record hooks (`hasFixableIssues`, `implementation`).
- *
- * @typedef {object} AssessmentCycleAfterContext
- * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
- * @property {number} cycle One-based cycle number.
- * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
- * @property {CycleRecord} cycleRecord Cycle record produced by the recorder.
- */
-
-/**
- * Args passed to the optional `afterCycle` hook with the full cycle context.
- *
- * @typedef {object} AssessmentCycleAfterCycleContext
- * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
- * @property {number} cycle One-based cycle number.
- * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
- * @property {Array<AssessmentCycleProviderOutput>} outputs Raw provider outputs from fan-out.
- * @property {AssessmentCycleSummary} outputSummary Aggregate summary of raw provider outputs.
- * @property {AssessmentCycleSummary} cycleSummary Final cycle summary (synthesis-derived when present, else `outputSummary`).
- * @property {CycleRecord} cycleRecord Cycle record produced by the recorder.
- * @property {string} synthesisProvider Provider id that produced the synthesis text.
- * @property {string} synthesisText Synthesis text produced by `runSynthesisWithFallback`.
- * @property {string} synthesisError Error message captured during synthesis (empty when none).
- */
-
-/**
  * Contract implemented by review/quality assessment cycle adapters. Adapters
  * may attach extra fields to the cycle record (`reviewers`, `outputs`, etc.);
  * `buildCycleRecord` is typed loosely enough to allow that.
@@ -215,9 +207,9 @@ import { writeRunState } from './run-state.js';
  * @property {(context: AssessmentCycleOutputsContext) => string} buildSynthesisPrompt Build the synthesis prompt.
  * @property {(context: AssessmentCycleRecordContext) => Partial<CycleRecord>} buildCycleRecord Build cycle record extras.
  * @property {(outputs: Array<AssessmentCycleProviderOutput>) => string} formatOutputs Render outputs for prior findings.
- * @property {(context: AssessmentCycleAfterContext) => boolean} hasFixableIssues Decide whether implementation should run.
- * @property {(context: AssessmentCycleAfterCycleContext) => (void|Promise<void>)} [afterCycle] Optional post-record hook.
- * @property {(context: AssessmentCycleAfterContext) => AssessmentCycleImplementationHandoff} implementation Implementation handoff builder.
+ * @property {(context: AssessmentCyclePostRecordContext) => boolean} hasFixableIssues Decide whether implementation should run.
+ * @property {(context: AssessmentCyclePostRecordContext) => (void|Promise<void>)} [afterCycle] Optional post-record hook.
+ * @property {(context: AssessmentCyclePostRecordContext) => AssessmentCycleImplementationHandoff} implementation Implementation handoff builder.
  */
 
 /**
@@ -297,10 +289,8 @@ export async function runAssessmentCycles(state, adapter) {
     applyCycleProgress(state, cycleRecord);
     await writeRunState(state, { status: 'running' });
     // Re-snapshot so post-record hooks see updated priorFindings.
-    const postRecordContext = createAssessmentCycleContext(state, cycle);
-
-    await callOptional(adapter.afterCycle, {
-      ...postRecordContext,
+    const postRecordContext = {
+      ...createAssessmentCycleContext(state, cycle),
       outputs,
       outputSummary,
       cycleSummary,
@@ -308,9 +298,11 @@ export async function runAssessmentCycles(state, adapter) {
       synthesisProvider,
       synthesisText,
       synthesisError,
-    });
+    };
 
-    if (!state.options.fix || !adapter.hasFixableIssues({ ...postRecordContext, cycleRecord })) {
+    await callOptional(adapter.afterCycle, postRecordContext);
+
+    if (!state.options.fix || !adapter.hasFixableIssues(postRecordContext)) {
       break;
     }
     if (shouldStopForStall(state, cycleRecord)) {
@@ -320,7 +312,7 @@ export async function runAssessmentCycles(state, adapter) {
       break;
     }
 
-    const implementationHandoff = adapter.implementation({ ...postRecordContext, cycleRecord });
+    const implementationHandoff = adapter.implementation(postRecordContext);
     const implementationPhase = await runImplementationAndValidationPhase(phaseView, {
       cycle,
       findings: recorder.priorFindings,

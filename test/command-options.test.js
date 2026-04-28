@@ -30,7 +30,7 @@ function readableSample(option) {
 
 test('readCommandOptionValue reads non-resolver flags through the shared option schema', () => {
   assert.deepEqual(optionByName('providers').resolve, []);
-  assert.deepEqual(optionByName('base-ref').resolve, []);
+  assert.deepEqual(optionByName('reviewers').resolve, []);
 
   assert.equal(
     readCommandOptionValue(new Map([['providers', 'mock']]), 'providers', ''),

@@ -16,7 +16,7 @@ function silentLogger() { return { info() {} }; }
 function uniqueSorted(values) { return [...new Set(values)].sort(); }
 
 const CYCLE_METADATA_FIELDS = Object.freeze(
-  'changed fix worktree allowDirty keepWorktree maxCycles maxImplementers stallCycles resume untilScore parallel serial providerRetries testCommand timeoutMs json failOnIssues'.split(' '),
+  'changed fix worktree baseRef allowDirty keepWorktree maxCycles maxImplementers stallCycles resume untilScore parallel serial providerRetries testCommand timeoutMs json failOnIssues'.split(' '),
 );
 
 function testState(cwd, {

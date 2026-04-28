@@ -8,7 +8,6 @@ import {
   captureWorkflowCommand as captureCommand,
   captureWorkflowCommandFailure as captureCommandFailure,
 } from './support/workflow-fixtures.js';
-
 import {
   parsed,
   tempDir,
@@ -25,7 +24,18 @@ import {
   writeFakeProvider,
 } from './support/fake-provider.js';
 
-test('runReviewCommand logs provider retry and keeps reviewer artifact path stable', { skip: process.platform === 'win32' }, async () => {
+const SKIP_WIN = { skip: process.platform === 'win32' };
+
+const REVIEW = {
+  label: 'runReviewCommand',
+  run: runReviewCommand,
+};
+const QUALITY = {
+  label: 'runQualityCommand',
+  run: runQualityCommand,
+};
+
+test('runReviewCommand logs provider retry and keeps reviewer artifact path stable', SKIP_WIN, async () => {
   const cwd = await tempDir();
   try {
     const reviewText = [
@@ -57,57 +67,74 @@ test('runReviewCommand logs provider retry and keeps reviewer artifact path stab
   }
 });
 
-test('runReviewCommand falls back to reviewer summaries when synthesis fails', { skip: process.platform === 'win32' }, async () => {
-  const cwd = await tempDir();
-  try {
-    const reviewText = [
+const SYNTHESIS_FAILURE_CASES = [
+  {
+    command: REVIEW,
+    flags: { provider: 'codex', reviewers: 'correctness,tests', json: 'true' },
+    positionals: ['fallback'],
+    synthesisErrorMessage: 'synthesis failed hard',
+    findingFragment: 'codex fake review finding',
+    setup: async (binDir, { reviewText, synthesisErrorMessage }) => {
+      await writeFakeProvider(binDir, 'codex', [
+        "const fs = require('node:fs');",
+        "const prompt = fs.readFileSync(0, 'utf8');",
+        "if (prompt.includes('\"kind\":\"review-synthesis\"')) {",
+        `  ${emitCodexError(synthesisErrorMessage)}`,
+        '  process.exit(1);',
+        '}',
+        emitCodexMessage(reviewText),
+      ]);
+    },
+    contentText: [
       '```yaml',
       'verdict: issues',
       'issue_count: 2',
       '```',
       '',
       'codex fake review finding',
-    ].join('\n');
-    const binDir = path.join(cwd, 'bin');
-    await writeFakeProvider(binDir, 'codex', [
-      "const fs = require('node:fs');",
-      "const prompt = fs.readFileSync(0, 'utf8');",
-      "if (prompt.includes('\"kind\":\"review-synthesis\"')) {",
-      `  ${emitCodexError('synthesis failed hard')}`,
-      '  process.exit(1);',
-      '}',
-      emitCodexMessage(reviewText),
-    ]);
-
-    const result = await captureCommand(
-      runReviewCommand,
-      parsed(['fallback'], { provider: 'codex', reviewers: 'correctness,tests', json: 'true' }),
-      cwd,
-      { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } },
-    );
-    const output = JSON.parse(result.stdout);
-
-    assert.equal(output.cycles[0].issueCount, 4);
-    assert.equal(output.cycles[0].reviewerIssueCount, 4);
-    assert.equal(output.cycles[0].synthesis, '');
-    assert.match(output.cycles[0].synthesisError, /codex exited with 1/);
-    assert.match(output.cycles[0].synthesisError, /synthesis failed hard/);
-    const report = await fs.readFile(output.reportPath, 'utf8');
-    assert.match(report, /Synthesis Error/);
-    assert.match(report, /codex fake review finding/);
-    assert.match(
-      await fs.readFile(path.join(path.dirname(output.reportPath), 'cycle-1/synthesis-error.md'), 'utf8'),
-      /synthesis failed hard/,
-    );
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runQualityCommand falls back to provider summaries when synthesis fails', { skip: process.platform === 'win32' }, async () => {
-  const cwd = await tempDir();
-  try {
-    const auditText = [
+    ].join('\n'),
+    assertCycle: ({ cycle }) => {
+      assert.equal(cycle.issueCount, 4);
+      assert.equal(cycle.reviewerIssueCount, 4);
+    },
+  },
+  {
+    command: QUALITY,
+    flags: { providers: 'codex,claude', area: 'maintainability', json: 'true' },
+    positionals: [],
+    synthesisErrorMessage: 'quality synthesis failed hard',
+    findingFragment: 'codex fake quality finding',
+    setup: async (binDir, { reviewText, synthesisErrorMessage }) => {
+      const cleanText = [
+        '```yaml',
+        'score: A',
+        'verdict: clean',
+        'issue_count: 0',
+        'summary: Claude found no maintainability issues.',
+        '```',
+        '',
+        'claude fake quality finding',
+      ].join('\n');
+      await writeFakeProvider(binDir, 'codex', [
+        "const fs = require('node:fs');",
+        "const prompt = fs.readFileSync(0, 'utf8');",
+        "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+        `  ${emitCodexError(synthesisErrorMessage)}`,
+        '  process.exit(1);',
+        '}',
+        emitCodexMessage(reviewText),
+      ]);
+      await writeFakeProvider(binDir, 'claude', [
+        "const fs = require('node:fs');",
+        "const prompt = fs.readFileSync(0, 'utf8');",
+        "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+        "  console.error('claude quality synthesis failed hard');",
+        '  process.exit(1);',
+        '}',
+        emitClaudeResult(cleanText),
+      ]);
+    },
+    contentText: [
       '```yaml',
       'score: B',
       'verdict: issues',
@@ -116,63 +143,50 @@ test('runQualityCommand falls back to provider summaries when synthesis fails', 
       '```',
       '',
       'codex fake quality finding',
-    ].join('\n');
-    const binDir = path.join(cwd, 'bin');
-    const cleanText = [
-      '```yaml',
-      'score: A',
-      'verdict: clean',
-      'issue_count: 0',
-      'summary: Claude found no maintainability issues.',
-      '```',
-      '',
-      'claude fake quality finding',
-    ].join('\n');
-    await writeFakeProvider(binDir, 'codex', [
-      "const fs = require('node:fs');",
-      "const prompt = fs.readFileSync(0, 'utf8');",
-      "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
-      `  ${emitCodexError('quality synthesis failed hard')}`,
-      '  process.exit(1);',
-      '}',
-      emitCodexMessage(auditText),
-    ]);
-    await writeFakeProvider(binDir, 'claude', [
-      "const fs = require('node:fs');",
-      "const prompt = fs.readFileSync(0, 'utf8');",
-      "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
-      "  console.error('claude quality synthesis failed hard');",
-      '  process.exit(1);',
-      '}',
-      emitClaudeResult(cleanText),
-    ]);
+    ].join('\n'),
+    assertCycle: ({ output, cycle }) => {
+      assert.equal(output.score, 'B');
+      assert.equal(output.issueCount, 1);
+      assert.equal(cycle.providerIssueCount, 1);
+    },
+  },
+];
 
-    const result = await captureCommand(
-      runQualityCommand,
-      parsed([], { providers: 'codex,claude', area: 'maintainability', json: 'true' }),
-      cwd,
-      { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } },
-    );
-    const output = JSON.parse(result.stdout);
+for (const testCase of SYNTHESIS_FAILURE_CASES) {
+  const { command, flags, positionals, synthesisErrorMessage, findingFragment, setup, contentText, assertCycle } = testCase;
+  const noun = command === REVIEW ? 'reviewer' : 'provider';
+  test(`${command.label} falls back to ${noun} summaries when synthesis fails`, SKIP_WIN, async () => {
+    const cwd = await tempDir();
+    try {
+      const binDir = path.join(cwd, 'bin');
+      await setup(binDir, { reviewText: contentText, synthesisErrorMessage });
 
-    assert.equal(output.score, 'B');
-    assert.equal(output.issueCount, 1);
-    assert.equal(output.cycles[0].providerIssueCount, 1);
-    assert.equal(output.cycles[0].synthesis, '');
-    assert.match(output.cycles[0].synthesisError, /quality synthesis failed hard/);
-    const report = await fs.readFile(output.reportPath, 'utf8');
-    assert.match(report, /Synthesis Error/);
-    assert.match(report, /codex fake quality finding/);
-    assert.match(
-      await fs.readFile(path.join(path.dirname(output.reportPath), 'cycle-1/synthesis-error.md'), 'utf8'),
-      /quality synthesis failed hard/,
-    );
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
+      const result = await captureCommand(
+        command.run,
+        parsed(positionals, flags),
+        cwd,
+        { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } },
+      );
+      const output = JSON.parse(result.stdout);
+      const cycle = output.cycles[0];
 
-test('runReviewCommand preserves completed cycle artifacts when a later fix cycle fails', { skip: process.platform === 'win32' }, async () => {
+      assertCycle({ output, cycle });
+      assert.equal(cycle.synthesis, '');
+      assert.match(cycle.synthesisError, new RegExp(synthesisErrorMessage));
+      const report = await fs.readFile(output.reportPath, 'utf8');
+      assert.match(report, /Synthesis Error/);
+      assert.match(report, new RegExp(findingFragment));
+      assert.match(
+        await fs.readFile(path.join(path.dirname(output.reportPath), 'cycle-1/synthesis-error.md'), 'utf8'),
+        new RegExp(synthesisErrorMessage),
+      );
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+}
+
+test('runReviewCommand preserves completed cycle artifacts when a later fix cycle fails', SKIP_WIN, async () => {
   const cwd = await tempDir();
   try {
     const reviewText = [
@@ -243,7 +257,7 @@ test('runReviewCommand preserves completed cycle artifacts when a later fix cycl
   }
 });
 
-test('runReviewCommand preserves successful parallel fan-out artifacts when a sibling reviewer fails', { skip: process.platform === 'win32' }, async () => {
+test('runReviewCommand preserves successful parallel fan-out artifacts when a sibling reviewer fails', SKIP_WIN, async () => {
   const cwd = await tempDir();
   try {
     const reviewText = [
@@ -348,62 +362,47 @@ test('runReviewCommand and runQualityCommand block unsafe fix on dirty current w
   }
 });
 
-test('runReviewCommand records test failure and fail-on-issues exitCode', async () => {
-  const cwd = await tempDir();
-  try {
-    await initGitRepo(cwd);
-    const result = await captureCommand(
-      runReviewCommand,
-      parsed(['failing validation'], {
-        provider: 'mock',
-        fix: 'true',
-        'max-cycles': '1',
-        test: 'node -e "process.exit(1)"',
-        'fail-on-issues': 'true',
-        json: 'true',
-      }),
-      cwd,
-    );
-    const output = JSON.parse(result.stdout);
+const TEST_FAILURE_CASES = [
+  {
+    command: REVIEW,
+    flags: { provider: 'mock', fix: 'true', 'max-cycles': '1', test: 'node -e "process.exit(1)"', 'fail-on-issues': 'true', json: 'true' },
+    positionals: ['failing validation'],
+    extraAssertions: ({ output }) => {
+      // review keeps cycle issueCount 1 from validation failure
+      assert.equal(output.cycles[0].issueCount, 1);
+    },
+    reportPattern: /Unresolved test failure: yes/,
+  },
+  {
+    command: QUALITY,
+    flags: { provider: 'mock', area: 'maintainability', fix: 'true', 'max-cycles': '1', test: 'node -e "process.exit(1)"', 'fail-on-issues': 'true', json: 'true' },
+    positionals: [],
+    extraAssertions: ({ output }) => {
+      // quality lowers final score to F when validation fails
+      assert.equal(output.score, 'F');
+      assert.equal(output.cycles[0].score, 'F');
+    },
+    reportPattern: /### Test\n\nfailed with exit 1/,
+  },
+];
 
-    assert.equal(result.exitCode, 1);
-    assert.equal(output.unresolvedTestFailure, true);
-    assert.equal(output.cycles[0].test.ok, false);
-    assert.equal(output.cycles[0].test.exitCode, 1);
-    assert.equal(output.cycles[0].issueCount, 1);
-    assert.match(await fs.readFile(output.reportPath, 'utf8'), /Unresolved test failure: yes/);
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
+for (const testCase of TEST_FAILURE_CASES) {
+  const { command, flags, positionals, extraAssertions, reportPattern } = testCase;
+  test(`${command.label} records test failure and surfaces fail-on-issues exit code`, async () => {
+    const cwd = await tempDir();
+    try {
+      await initGitRepo(cwd);
+      const result = await captureCommand(command.run, parsed(positionals, flags), cwd);
+      const output = JSON.parse(result.stdout);
 
-test('runQualityCommand records test failure, lowers score, and fail-on-issues exitCode', async () => {
-  const cwd = await tempDir();
-  try {
-    await initGitRepo(cwd);
-    const result = await captureCommand(
-      runQualityCommand,
-      parsed([], {
-        provider: 'mock',
-        area: 'maintainability',
-        fix: 'true',
-        'max-cycles': '1',
-        test: 'node -e "process.exit(1)"',
-        'fail-on-issues': 'true',
-        json: 'true',
-      }),
-      cwd,
-    );
-    const output = JSON.parse(result.stdout);
-
-    assert.equal(result.exitCode, 1);
-    assert.equal(output.score, 'F');
-    assert.equal(output.unresolvedTestFailure, true);
-    assert.equal(output.cycles[0].test.ok, false);
-    assert.equal(output.cycles[0].test.exitCode, 1);
-    assert.equal(output.cycles[0].score, 'F');
-    assert.match(await fs.readFile(output.reportPath, 'utf8'), /### Test\n\nfailed with exit 1/);
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
+      assert.equal(result.exitCode, 1);
+      assert.equal(output.unresolvedTestFailure, true);
+      assert.equal(output.cycles[0].test.ok, false);
+      assert.equal(output.cycles[0].test.exitCode, 1);
+      extraAssertions({ output });
+      assert.match(await fs.readFile(output.reportPath, 'utf8'), reportPattern);
+    } finally {
+      await fs.rm(cwd, { recursive: true, force: true });
+    }
+  });
+}

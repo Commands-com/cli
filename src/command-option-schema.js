@@ -3,18 +3,49 @@ import {
   COMMAND_REGISTRY,
   COMMON_OPTION_SCOPE,
 } from './command-registry.js';
-import {
-  CYCLE_COMMAND,
-  FANOUT_MODE,
-  ROOM_COMMAND_GROUP,
-  SHARED_WORKFLOW,
-  cycleField,
-  defineOption,
-  roomField,
-} from './command-option-resolvers.js';
 import { DEFAULT_TIMEOUT_MS } from './provider-limits.js';
 
-/** @typedef {{name: string, value?: string, description: string, scopes: ReadonlyArray<string>, aliases: ReadonlyArray<string>, readWith: import('./command-option-resolvers.js').OptionReader, resumeOverrideFields: ReadonlyArray<string>, resolve: ReadonlyArray<import('./command-option-resolvers.js').OptionResolver>, max?: number}} CommandOption */
+/** @typedef {'cycle'|'room'} OptionResolverKind */
+/** @typedef {'sharedWorkflow'|'cycleCommand'|'fanoutMode'|'roomCommand'} OptionResolverGroup */
+/** @typedef {'stringOption'|'booleanOption'|'positiveIntegerOption'|'nonNegativeIntegerOption'|'listOption'} OptionReader */
+/** @typedef {{resolver: OptionResolverKind, field: string, fallback: any, group: OptionResolverGroup}} OptionResolver */
+/** @typedef {{name: string, value?: string, description: string, scopes: ReadonlyArray<string>, aliases: ReadonlyArray<string>, readWith: OptionReader, resumeOverrideFields: ReadonlyArray<string>, resolve: ReadonlyArray<OptionResolver>, max?: number}} CommandOption */
+
+export const OPTION_READER_NAMES = Object.freeze([
+  'stringOption',
+  'booleanOption',
+  'positiveIntegerOption',
+  'nonNegativeIntegerOption',
+  'listOption',
+]);
+
+const SHARED_WORKFLOW = 'sharedWorkflow';
+const CYCLE_COMMAND = 'cycleCommand';
+const FANOUT_MODE = 'fanoutMode';
+const ROOM_COMMAND = 'roomCommand';
+
+function cycleField(field, fallback, group) {
+  return Object.freeze({ resolver: 'cycle', field, fallback, group });
+}
+
+function roomField(field, fallback, group) {
+  return Object.freeze({ resolver: 'room', field, fallback, group });
+}
+
+function defineOption(option) {
+  const readWith = option.readWith || (option.value ? 'stringOption' : 'booleanOption');
+  const resolveSource = option.resolve === undefined
+    ? []
+    : Array.isArray(option.resolve) ? option.resolve : [option.resolve];
+  return Object.freeze({
+    ...option,
+    readWith,
+    aliases: Object.freeze(option.aliases || []),
+    scopes: Object.freeze(option.scopes || []),
+    resumeOverrideFields: Object.freeze(Array.isArray(option.resumeOverrideFields) ? option.resumeOverrideFields : []),
+    resolve: Object.freeze(resolveSource),
+  });
+}
 
 const DEFAULT_MAX_IMPLEMENTERS = 15;
 export const MAX_IMPLEMENTERS = 32;
@@ -35,7 +66,6 @@ export const COMMON = COMMON_OPTION_SCOPE;
 const REVIEW = COMMAND_NAME.REVIEW;
 const QUALITY = COMMAND_NAME.QUALITY;
 const ROOM = COMMAND_NAME.ROOM;
-const ROOMS = COMMAND_NAME.ROOMS;
 const DOCTOR = COMMAND_NAME.DOCTOR;
 const INIT = COMMAND_NAME.INIT;
 const RUNS = COMMAND_NAME.RUNS;
@@ -145,6 +175,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     value: '<ref>',
     description: 'Base ref for --worktree creation (default: HEAD)',
     scopes: CYCLE_COMMANDS,
+    resolve: cycleField('baseRef', '', CYCLE_COMMAND),
   },
   {
     name: 'allow-dirty',
@@ -208,7 +239,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     readWith: 'positiveIntegerOption',
     description: 'Limit room participants',
     scopes: [ROOM],
-    resolve: roomField('requestedParticipantLimit', ({ participantFallback }) => participantFallback, ROOM_COMMAND_GROUP),
+    resolve: roomField('requestedParticipantLimit', ({ participantFallback }) => participantFallback, ROOM_COMMAND),
   },
   {
     name: 'parallel',
@@ -231,7 +262,7 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'no-synthesis',
     description: 'Skip the final room synthesis pass',
     scopes: [ROOM],
-    resolve: roomField('noSynthesis', false, ROOM_COMMAND_GROUP),
+    resolve: roomField('noSynthesis', false, ROOM_COMMAND),
   },
   {
     name: 'ping',
@@ -246,16 +277,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     scopes: [...CYCLE_COMMANDS, ROOM],
     resumeOverrideFields: Object.freeze(['providerRetries']),
     resolve: [
-      cycleField(
-        'providerRetries',
-        () => COMMAND_OPTION_DEFAULTS.providerRetries,
-        SHARED_WORKFLOW,
-      ),
-      roomField(
-        'providerRetries',
-        () => COMMAND_OPTION_DEFAULTS.providerRetries,
-        SHARED_WORKFLOW,
-      ),
+      cycleField('providerRetries', () => COMMAND_OPTION_DEFAULTS.providerRetries, SHARED_WORKFLOW),
+      roomField('providerRetries', () => COMMAND_OPTION_DEFAULTS.providerRetries, SHARED_WORKFLOW),
     ],
   },
   {
@@ -274,16 +297,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     scopes: [REVIEW, QUALITY, ROOM, DOCTOR],
     resumeOverrideFields: Object.freeze(['timeoutMs']),
     resolve: [
-      cycleField(
-        'timeoutMs',
-        () => COMMAND_OPTION_DEFAULTS.timeoutMs,
-        SHARED_WORKFLOW,
-      ),
-      roomField(
-        'timeoutMs',
-        () => COMMAND_OPTION_DEFAULTS.timeoutMs,
-        SHARED_WORKFLOW,
-      ),
+      cycleField('timeoutMs', () => COMMAND_OPTION_DEFAULTS.timeoutMs, SHARED_WORKFLOW),
+      roomField('timeoutMs', () => COMMAND_OPTION_DEFAULTS.timeoutMs, SHARED_WORKFLOW),
     ],
   },
   {

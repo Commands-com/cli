@@ -53,18 +53,10 @@ const DEFAULT_REVIEWERS = Object.freeze(['correctness', 'tests', 'maintainabilit
  */
 
 /**
- * Test seam dependencies accepted by `runReviewCommand`. The bag may carry an
- * override for `runCycleWorkflow` itself; remaining fields are spread into the
- * inner workflow's own `dependencies` (see `RunCycleWorkflowDependencies`).
- *
- * @typedef {RunCycleWorkflowDependencies & { runCycleWorkflow?: typeof runCycleWorkflow }} RunReviewCommandDependencies
- */
-
-/**
  * @typedef {object} RunReviewCommandArgs
  * @property {string} cwd Command working directory.
  * @property {CycleLogger} [logger] Optional logger override (defaults to a review logger).
- * @property {RunReviewCommandDependencies} [dependencies] Optional test seam.
+ * @property {RunCycleWorkflowDependencies} [dependencies] Optional test seam forwarded to the cycle workflow.
  */
 
 /**
@@ -81,9 +73,8 @@ export async function runReviewCommand(parsed, { cwd, logger = createCommandLogg
     metadataField: 'reviewers',
     fallback: /** @type {string[]} */ (DEFAULT_REVIEWERS),
   });
-  const { runCycleWorkflow: workflow = runCycleWorkflow, ...workflowDeps } = dependencies;
 
-  const state = await workflow(parsed, {
+  const state = await runCycleWorkflow(parsed, {
     cwd,
     kind: 'review',
     label: objective,
@@ -93,7 +84,7 @@ export async function runReviewCommand(parsed, { cwd, logger = createCommandLogg
     },
     logger,
     adapter: createReviewAssessmentAdapter({ objective, reviewers }),
-    dependencies: workflowDeps,
+    dependencies,
   });
 
   return completeAssessmentCommandRun({

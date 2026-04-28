@@ -1,51 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import { runReviewCommand } from '../src/review.js';
 import { createCycleRunContext } from '../src/cycle-state.js';
-import { createCommandLogger } from '../src/logger.js';
+import { tempDir } from './support/cli.js';
 import { captureCommandResultLogs as captureLogs } from './support/workflow-fixtures.js';
 
 function parsed(positionals = [], flags = {}) {
   return {
     positionals,
     flags: new Map(Object.entries(flags).map(([key, value]) => [key, String(value)])),
-  };
-}
-
-function testState(cwd, { kind = 'review', options = {} } = {}) {
-  return {
-    kind,
-    store: {
-      runId: 'unit-run',
-      writes: [],
-      async write(name, content) {
-        this.writes.push({ name, content: String(content || '') });
-        return `/unit/${name}`;
-      },
-    },
-    options: {
-      providerIds: ['unit'],
-      primaryProvider: { id: 'unit' },
-      model: '',
-      json: true,
-      failOnIssues: false,
-      fix: false,
-      changed: false,
-      ...options,
-    },
-    context: {
-      repoRoot: cwd,
-      gitRoot: cwd,
-      branch: 'main',
-      head: 'abc123',
-      status: '',
-      diffStat: '',
-      diff: '',
-    },
-    workspace: { mode: 'current', cwd },
-    cycles: [],
-    priorFindings: 'prior regression note',
-    hasUnresolvedTestFailure: false,
   };
 }
 
@@ -84,8 +48,8 @@ function exerciseReviewAdapter(adapter, state) {
   const run = createCycleRunContext(state);
   const cycle = 2;
   const outputs = [
-    reviewOutput('unit', 'correctness', 2),
-    reviewOutput('unit', 'maintainability/risk', 0),
+    reviewOutput('mock', 'correctness', 2),
+    reviewOutput('mock', 'maintainability/risk', 0),
   ];
 
   assert.equal(adapter.findingsTitle, 'Reviewer outputs');
@@ -103,9 +67,8 @@ function exerciseReviewAdapter(adapter, state) {
   const prompt = fanout.adapter.buildPrompt({ item: 'correctness', context });
   assert.match(prompt, /You are the correctness reviewer in a Commands\.com review cycle\./);
   assert.match(prompt, /Objective: Harden adapter wiring/);
-  assert.match(prompt, /prior regression note/);
   assert.deepEqual(
-    fanout.adapter.buildOutput({ provider: { id: 'unit' }, item: 'correctness', text: outputs[0].text }),
+    fanout.adapter.buildOutput({ provider: { id: 'mock' }, item: 'correctness', text: outputs[0].text }),
     outputs[0],
   );
 
@@ -136,7 +99,7 @@ function exerciseReviewAdapter(adapter, state) {
   const synthesisPrompt = adapter.buildSynthesisPrompt({ runContext: run, cycle, context, outputs });
   assert.match(synthesisPrompt, /Synthesize review findings for a Commands\.com review cycle\./);
   assert.equal(synthesisPrompt.includes('Reviewer outputs:'), true);
-  assert.equal(synthesisPrompt.includes('## unit / maintainability/risk'), true);
+  assert.equal(synthesisPrompt.includes('## mock / maintainability/risk'), true);
 
   const cycleRecord = adapter.buildCycleRecord({
     runContext: run,
@@ -144,11 +107,11 @@ function exerciseReviewAdapter(adapter, state) {
     context,
     outputs,
     fanoutFailures: [
-      { provider: 'unit', item: 'maintainability/risk', error: 'transient reviewer failure' },
+      { provider: 'mock', item: 'maintainability/risk', error: 'transient reviewer failure' },
     ],
     outputSummary,
     cycleSummary,
-    synthesisProvider: 'unit-synth',
+    synthesisProvider: 'mock-synth',
     synthesisText,
     synthesisError: '',
   });
@@ -157,21 +120,15 @@ function exerciseReviewAdapter(adapter, state) {
     issueCount: 1,
     synopsis: '1 actionable review issue.',
     reviewerIssueCount: 2,
-    synthesisProvider: 'unit-synth',
+    synthesisProvider: 'mock-synth',
     synthesis: synthesisText,
     synthesisError: '',
     reviewers: outputs,
   });
   assert.equal('fanoutFailures' in cycleRecord, false);
-  assert.equal(adapter.formatOutputs(outputs).includes('## unit / correctness'), true);
+  assert.equal(adapter.formatOutputs(outputs).includes('## mock / correctness'), true);
   assert.equal(adapter.hasFixableIssues({ runContext: run, cycle, context, cycleRecord }), true);
   assert.equal(adapter.hasFixableIssues({ runContext: run, cycle, context, cycleRecord: { score: 'A', issueCount: 0 } }), false);
-  assert.equal(adapter.hasFixableIssues({
-    runContext: createCycleRunContext(testState(context.repoRoot, { options: { untilScore: 'A' } })),
-    cycle,
-    context,
-    cycleRecord: { score: 'B', issueCount: 1 },
-  }), true);
   assert.deepEqual(adapter.implementation({ runContext: run, cycle, context, cycleRecord }), {
     objective: 'Harden adapter wiring',
   });
@@ -180,116 +137,95 @@ function exerciseReviewAdapter(adapter, state) {
 }
 
 test('runReviewCommand wires review assessment adapter hooks through the workflow boundary', async () => {
-  const cwd = '/unit/repo';
-  const commandParsed = parsed(['Harden', 'adapter', 'wiring'], {
-    reviewers: 'correctness,maintainability/risk',
-    json: 'true',
-  });
-  let logger;
-  const calls = {};
+  const cwd = await tempDir('commands-com-review-cmd-');
+  try {
+    const commandParsed = parsed(['Harden', 'adapter', 'wiring'], {
+      provider: 'mock',
+      reviewers: 'correctness,maintainability/risk',
+      json: 'true',
+      test: 'true',
+    });
+    const calls = {};
 
-  const result = await captureLogs(() => {
-    logger = createCommandLogger(commandParsed, { kind: 'review' });
-    return runReviewCommand(commandParsed, {
+    const result = await captureLogs(() => runReviewCommand(commandParsed, {
       cwd,
-      logger,
       dependencies: {
-        runCycleWorkflow: async (actualParsed, options) => {
-          calls.workflowOptions = options;
-          assert.equal(actualParsed, commandParsed);
-          assert.equal(options.logger, logger);
-          assert.equal(options.cwd, cwd);
-          assert.equal(options.kind, 'review');
-          assert.equal(options.label, 'Harden adapter wiring');
-          assert.deepEqual(options.metadata, {
-            objective: 'Harden adapter wiring',
-            reviewers: ['correctness', 'maintainability/risk'],
-          });
-
-          const state = testState(cwd);
-          state.logger = options.logger;
+        runAssessmentCycles: async (state, adapter) => {
           calls.state = state;
-          calls.adapter = options.adapter;
+          calls.adapter = adapter;
           state.cycles.push({
             cycle: 1,
-            ...exerciseReviewAdapter(options.adapter, state),
+            ...exerciseReviewAdapter(adapter, state),
           });
-          return state;
         },
       },
-    });
-  });
+    }));
 
-  const payload = JSON.parse(result.stdout);
-  assert.equal(result.exitCode, 0);
-  assert.equal(payload.type, 'review.completed');
-  assert.equal(payload.score, 'B');
-  assert.equal(payload.issueCount, 1);
-  assert.equal(payload.synopsis, '1 actionable review issue.');
-  assert.equal(payload.reportPath, '/unit/review-cycle.md');
-  assert.equal(payload.cycles[0].issueCount, 1);
-  assert.equal(payload.cycles[0].reviewerIssueCount, 2);
-  const reportWrite = calls.state.store.writes.find((write) => write.name === 'review-cycle.md');
-  assert.equal(reportWrite.content.includes('# Review Cycle: Harden adapter wiring'), true);
-  assert.ok(calls.state.store.writes.some((write) => write.name === 'final-report.md'));
-  assert.equal(typeof calls.workflowOptions.adapter, 'object');
-  assert.equal(typeof calls.adapter.summarizeOutputs, 'function');
-  assert.equal(typeof calls.adapter.summarizeSynthesis, 'function');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(result.exitCode, 0);
+    assert.equal(payload.type, 'review.completed');
+    assert.equal(payload.score, 'B');
+    assert.equal(payload.issueCount, 1);
+    assert.equal(payload.synopsis, '1 actionable review issue.');
+    assert.match(payload.reportPath, /review-cycle\.md$/);
+    assert.equal(payload.cycles[0].issueCount, 1);
+    assert.equal(payload.cycles[0].reviewerIssueCount, 2);
+    assert.equal(calls.state.kind, 'review');
+    assert.equal(typeof calls.adapter.summarizeOutputs, 'function');
+    assert.equal(typeof calls.adapter.summarizeSynthesis, 'function');
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
 });
 
-test('runReviewCommand owns reviewer parsing and fail-on-issues result policy', async () => {
-  const cwd = '/unit/repo';
-  const commandParsed = parsed(['Review', 'boundary'], {
-    reviewers: 'correctness, ,tests',
-    'fail-on-issues': 'true',
-    json: 'true',
-  });
-  let logger;
-  const calls = {};
-
-  const result = await captureLogs(() => {
-    logger = createCommandLogger(commandParsed, { kind: 'review' });
-    return runReviewCommand(commandParsed, {
-      cwd,
-      logger,
-      dependencies: {
-        runCycleWorkflow: async (actualParsed, options) => {
-          calls.workflowOptions = options;
-          assert.equal(actualParsed, commandParsed);
-          assert.equal(options.logger, logger);
-          assert.deepEqual(options.metadata, {
-            objective: 'Review boundary',
-            reviewers: ['correctness', 'tests'],
-          });
-
-          const state = testState(cwd, {
-            options: {
-              failOnIssues: true,
-              json: true,
-            },
-          });
-          state.logger = options.logger;
-          state.cycles.push({
-            cycle: 1,
-            score: 'C',
-            issueCount: 2,
-            reviewerIssueCount: 2,
-            synopsis: 'Two review findings remain.',
-            synthesisProvider: 'unit',
-            synthesis: '',
-            synthesisError: '',
-            reviewers: [],
-          });
-          return state;
+test('runReviewCommand untilScore option keeps clean cycles fixable until target met', async () => {
+  const cwd = await tempDir('commands-com-review-until-');
+  try {
+    let beforeTargetFixable;
+    let atTargetFixable;
+    await captureLogs(() => runReviewCommand(
+      parsed(['until target review'], {
+        provider: 'mock',
+        reviewers: 'correctness',
+        json: 'true',
+        test: 'true',
+        until: 'A',
+      }),
+      {
+        cwd,
+        dependencies: {
+          runAssessmentCycles: async (state, adapter) => {
+            const run = createCycleRunContext(state);
+            beforeTargetFixable = adapter.hasFixableIssues({
+              runContext: run,
+              cycle: 1,
+              context: state.context,
+              cycleRecord: { cycle: 1, score: 'B', issueCount: 1 },
+            });
+            atTargetFixable = adapter.hasFixableIssues({
+              runContext: run,
+              cycle: 1,
+              context: state.context,
+              cycleRecord: { cycle: 1, score: 'A', issueCount: 0 },
+            });
+            state.cycles.push({
+              cycle: 1,
+              score: 'A',
+              issueCount: 0,
+              synopsis: 'no issues',
+              reviewerIssueCount: 0,
+              synthesisProvider: 'mock',
+              synthesis: '',
+              synthesisError: '',
+              reviewers: [],
+            });
+          },
         },
       },
-    });
-  });
-
-  const payload = JSON.parse(result.stdout);
-  assert.equal(result.exitCode, 1);
-  assert.equal(result.commandResult.failed, true);
-  assert.equal(payload.type, 'review.completed');
-  assert.equal(payload.cycles[0].issueCount, 2);
-  assert.equal(calls.workflowOptions.kind, 'review');
+    ));
+    assert.equal(beforeTargetFixable, true);
+    assert.equal(atTargetFixable, false);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
 });

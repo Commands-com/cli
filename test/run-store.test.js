@@ -157,6 +157,37 @@ test('resolveRunDir(latest) falls back to directory mtimeMs when metadata.create
   }
 });
 
+test('prepareRun rejects empty or whitespace-only kind and label and accepts valid inputs', async () => {
+  const cwd = await tempDir();
+  try {
+    await assert.rejects(
+      prepareRun(cwd, { kind: '', label: 'ok', writeSetupArtifacts: false }),
+      /kind must be a non-empty string/,
+    );
+    await assert.rejects(
+      prepareRun(cwd, { kind: '   ', label: 'ok', writeSetupArtifacts: false }),
+      /kind must be a non-empty string/,
+    );
+    await assert.rejects(
+      prepareRun(cwd, { kind: 'review', label: '', writeSetupArtifacts: false }),
+      /label must be a non-empty string/,
+    );
+    await assert.rejects(
+      prepareRun(cwd, { kind: 'review', label: '\t \n', writeSetupArtifacts: false }),
+      /label must be a non-empty string/,
+    );
+
+    const { store } = await prepareRun(cwd, {
+      kind: 'review',
+      label: 'Valid Label',
+      writeSetupArtifacts: false,
+    });
+    assert.match(store.runId, RUN_ID_PATTERN);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('prepareRun forwards changed context into the context artifact', async () => {
   const cwd = await tempDir();
   try {
