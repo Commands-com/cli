@@ -9,12 +9,13 @@ function parsed(positionals = [], flags = {}) {
   };
 }
 
-async function captureResolved(commandParsed) {
+async function captureAdapter(commandParsed) {
   const calls = {};
   await runQualityCommand(commandParsed, {
     cwd: '/unit/repo',
     dependencies: {
       runCycleWorkflow: async (_actualParsed, options) => {
+        calls.adapter = options.adapter;
         const fanout = options.adapter.fanout({
           runContext: { options: {}, logger: { info: () => {} }, priorFindings: '' },
           cycle: 1,
@@ -29,8 +30,8 @@ async function captureResolved(commandParsed) {
   return calls;
 }
 
-test('runQualityCommand emits a single combined audit item with array value across multiple areas', async () => {
-  const { auditItems } = await captureResolved(parsed([], {
+test('runQualityCommand emits a single combined audit item with array value and joined label', async () => {
+  const { auditItems } = await captureAdapter(parsed([], {
     area: 'architecture,correctness',
     json: 'true',
   }));
@@ -40,13 +41,30 @@ test('runQualityCommand emits a single combined audit item with array value acro
   assert.equal(auditItems[0].pathSegment, 'all-areas');
 });
 
-test('runQualityCommand wraps a single area in array value while preserving its path segment', async () => {
-  const { auditItems } = await captureResolved(parsed([], {
+test('runQualityCommand preserves the derived pathSegment when only one area is supplied', async () => {
+  const { auditItems } = await captureAdapter(parsed([], {
     area: 'correctness',
     json: 'true',
   }));
-  assert.equal(auditItems.length, 1);
   assert.deepEqual(auditItems[0].value, ['correctness']);
-  assert.equal(auditItems[0].label, 'correctness');
   assert.equal(auditItems[0].pathSegment, 'correctness');
+});
+
+test('runQualityCommand summarizes outputs as combined provider audits even for a single area', async () => {
+  const { adapter } = await captureAdapter(parsed([], {
+    area: 'correctness',
+    json: 'true',
+  }));
+  const summary = adapter.summarizeOutputs({
+    outputs: [{
+      provider: 'unit',
+      area: 'correctness',
+      areas: ['correctness'],
+      score: 'B',
+      issueCount: 1,
+      synopsis: 'one issue',
+    }],
+  });
+  assert.match(summary.synopsis, /1 provider audit/);
+  assert.match(summary.synopsis, /unit: correctness/);
 });

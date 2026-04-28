@@ -160,11 +160,10 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
       };
     },
     summarizeOutputs({ outputs }) {
-      const combinedAreaAudits = outputs.some((output) => Array.isArray(output.areas) && output.areas.length > 1);
       return summarizeScoredOutputs(outputs, {
         noun: 'quality issue',
-        itemName: combinedAreaAudits ? 'provider audit' : 'area',
-        label: (output) => (combinedAreaAudits ? `${output.provider}: ${output.area}` : output.area),
+        itemName: 'provider audit',
+        label: (output) => `${output.provider}: ${output.area}`,
       });
     },
     summarizeSynthesis({ synthesisText }) {

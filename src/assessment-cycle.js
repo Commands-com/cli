@@ -296,6 +296,7 @@ export async function runAssessmentCycles(state, adapter) {
     });
     applyCycleProgress(state, cycleRecord);
     await writeRunState(state, { status: 'running' });
+    // Re-snapshot so post-record hooks see updated priorFindings.
     const postRecordContext = createAssessmentCycleContext(state, cycle);
 
     await callOptional(adapter.afterCycle, {

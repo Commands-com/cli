@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/Node-20.19%2B-339933.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Providers](https://img.shields.io/badge/Providers-Codex%20%7C%20Claude%20%7C%20Gemini-8B5CF6.svg)](#providers)
-[![Tests](https://github.com/Commands-com/cli/actions/workflows/test.yml/badge.svg)](https://github.com/Commands-com/cli/actions/workflows/test.yml)
+[![Tests](https://github.com/Commands-com/commands-com/actions/workflows/test.yml/badge.svg)](https://github.com/Commands-com/commands-com/actions/workflows/test.yml)
 
 ```sh
 npx commands-com quality --until A

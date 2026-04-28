@@ -86,7 +86,6 @@ function preflightChecks(state) {
     check(
       'max-implementers',
       options.maxImplementers === undefined
-        || options.maxImplementers === null
         || (Number.isInteger(options.maxImplementers)
           && options.maxImplementers >= 1
           && options.maxImplementers <= MAX_IMPLEMENTERS),
@@ -95,7 +94,6 @@ function preflightChecks(state) {
     check(
       'stall-cycles',
       options.stallCycles === undefined
-        || options.stallCycles === null
         || (Number.isInteger(options.stallCycles) && options.stallCycles >= 0),
       '--stall-cycles must be a non-negative integer',
     ),

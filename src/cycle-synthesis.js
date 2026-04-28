@@ -9,8 +9,7 @@ import {
   runProviderItem,
 } from './provider-item-workflow.js';
 import { formatFailureMessage } from './errors.js';
-import { isTransientProviderError } from './providers.js';
-import { providerFallbackChain } from './provider-fallback.js';
+import { providerFallbackChain, runWithProviderFallback } from './provider-fallback.js';
 
 /**
  * @typedef {import('./cycle-state.js').CycleProvider} CycleProvider
@@ -85,7 +84,48 @@ export function createRoomSynthesisArtifacts({ store, provider }) {
  * @typedef {import('./provider-item-workflow.js').ProviderItemArtifacts & {
  *   writeError: (text: string) => (void|Promise<void>),
  * }} CycleSynthesisArtifacts
- *
+ */
+
+async function tryProviderSynthesis({
+  providerCall,
+  artifacts,
+  prompt,
+  logger,
+  prefix,
+}) {
+  const {
+    provider,
+    model,
+    timeoutMs,
+    providerRetries,
+    cwd,
+  } = providerCall;
+  logger?.info(`${prefix}synthesis (${provider.id})`);
+  return runProviderItem({
+    provider,
+    label: 'synthesis',
+    prompt,
+    artifacts,
+    cwd,
+    model,
+    timeoutMs,
+    logger,
+    retry: {
+      retries: providerRetries,
+      logMessage: ({ retry, retries }) => (
+        `${prefix}synthesis retry ${retry}/${retries} after transient ${provider.id} failure`
+      ),
+    },
+    artifactPolicy: {
+      writeFailure: ({ error }) => artifacts.writeError(formatFailureMessage(error)),
+    },
+    outputPolicy: {
+      allowEmpty: true,
+    },
+  });
+}
+
+/**
  * @param {{
  *   providerCall: {
  *     provider: CycleProvider,
@@ -99,7 +139,6 @@ export function createRoomSynthesisArtifacts({ store, provider }) {
  *     logger?: CycleLogger,
  *     prefix?: string,
  *     complete?: string,
- *     deferFallbackLog?: boolean,
  *   },
  *   prompt: string,
  *   fallbackDescription: string,
@@ -112,44 +151,20 @@ export async function runProviderSynthesisWithFallback({
   prompt,
   fallbackDescription,
 }) {
-  const {
-    provider,
-    model,
-    timeoutMs,
-    providerRetries,
-    cwd,
-  } = providerCall;
+  const { provider } = providerCall;
   const {
     logger,
     prefix = '',
     complete = '',
-    deferFallbackLog = false,
   } = logging;
 
-  logger?.info(`${prefix}synthesis (${provider.id})`);
-
   try {
-    const synthesisResult = await runProviderItem({
-      provider,
-      label: 'synthesis',
-      prompt,
+    const synthesisResult = await tryProviderSynthesis({
+      providerCall,
       artifacts,
-      cwd,
-      model,
-      timeoutMs,
+      prompt,
       logger,
-      retry: {
-        retries: providerRetries,
-        logMessage: ({ retry, retries }) => (
-          `${prefix}synthesis retry ${retry}/${retries} after transient ${provider.id} failure`
-        ),
-      },
-      artifactPolicy: {
-        writeFailure: ({ error }) => artifacts.writeError(formatFailureMessage(error)),
-      },
-      outputPolicy: {
-        allowEmpty: true,
-      },
+      prefix,
     });
     if (complete) logger?.info(complete);
     return {
@@ -159,9 +174,7 @@ export async function runProviderSynthesisWithFallback({
     };
   } catch (error) {
     const synthesisError = formatFailureMessage(error);
-    logger?.info(deferFallbackLog && isTransientProviderError(error)
-      ? `${prefix}synthesis failed (${provider.id})`
-      : `${prefix}synthesis failed (${provider.id}); using ${fallbackDescription}`);
+    logger?.info(`${prefix}synthesis failed (${provider.id}); using ${fallbackDescription}`);
     return {
       synthesisProvider: provider.id,
       synthesisText: '',
@@ -189,44 +202,56 @@ export async function runSynthesisWithFallback(dependencies, {
     providerRetries,
   } = options;
   const providerChain = providerFallbackChain(primaryProvider, providers);
-  let lastResult;
-  for (let index = 0; index < providerChain.length; index += 1) {
-    const provider = providerChain[index];
-    const isLast = index === providerChain.length - 1;
-    const hasFallbackProvider = !isLast;
-    const result = await runProviderSynthesisWithFallback({
-      providerCall: {
-        provider,
-        model,
-        timeoutMs,
-        providerRetries,
-        cwd: context.repoRoot,
+  const lastInChain = providerChain[providerChain.length - 1];
+  const prefix = `cycle ${cycle}: `;
+  let attempted = providerChain[0];
+
+  try {
+    return await runWithProviderFallback({
+      providerChain,
+      runForProvider: async (provider, { isLast }) => {
+        attempted = provider;
+        const result = await tryProviderSynthesis({
+          providerCall: {
+            provider,
+            model,
+            timeoutMs,
+            providerRetries,
+            cwd: context.repoRoot,
+          },
+          artifacts: createCycleSynthesisArtifacts({
+            store,
+            cycle,
+            provider,
+            sharedError: isLast,
+          }),
+          prompt,
+          logger,
+          prefix,
+        });
+        return {
+          synthesisProvider: provider.id,
+          synthesisText: result.text,
+          synthesisError: '',
+        };
       },
-      artifacts: createCycleSynthesisArtifacts({
-        store,
-        cycle,
-        provider,
-        sharedError: !hasFallbackProvider,
-      }),
-      logging: {
-        logger,
-        prefix: `cycle ${cycle}: `,
-        deferFallbackLog: hasFallbackProvider,
+      onFallback: async ({ from, to }) => {
+        logger?.info(`${prefix}synthesis failed (${from.id})`);
+        logger?.info(`${prefix}synthesis fallback ${from.id} -> ${to.id}`);
       },
-      prompt,
-      fallbackDescription,
     });
-    lastResult = result;
-    if (result.synthesisText) return result;
-    if (!isTransientProviderError(result.synthesisError) || isLast) {
-      if (hasFallbackProvider && result.synthesisError) {
-        await store.write(sharedCycleSynthesisErrorPath(cycle), result.synthesisError);
-      }
-      return result;
+  } catch (error) {
+    const synthesisError = formatFailureMessage(error);
+    logger?.info(`${prefix}synthesis failed (${attempted.id}); using ${fallbackDescription}`);
+    if (attempted !== lastInChain) {
+      await store.write(sharedCycleSynthesisErrorPath(cycle), synthesisError);
     }
-    logger?.info(`cycle ${cycle}: synthesis fallback ${provider.id} -> ${providerChain[index + 1].id}`);
+    return {
+      synthesisProvider: attempted.id,
+      synthesisText: '',
+      synthesisError,
+    };
   }
-  return lastResult;
 }
 
 export function formatPriorFindings({
