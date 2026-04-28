@@ -7,7 +7,7 @@
 [![Node](https://img.shields.io/badge/Node-20.19%2B-339933.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](./LICENSE)
 [![Providers](https://img.shields.io/badge/Providers-Codex%20%7C%20Claude%20%7C%20Gemini-8B5CF6.svg)](#providers)
-[![Tests](https://github.com/Commands-com/commands-com/actions/workflows/test.yml/badge.svg)](https://github.com/Commands-com/commands-com/actions/workflows/test.yml)
+[![Tests](https://github.com/Commands-com/cli/actions/workflows/test.yml/badge.svg)](https://github.com/Commands-com/cli/actions/workflows/test.yml)
 
 ```sh
 npx commands-com quality --until A
@@ -21,18 +21,18 @@ keeps going until the target grade is reached or the safety cap stops it.
 
 ---
 
-## Why This Is Fun
+## Set It. Walk Away.
 
-Most agent tools ask you to steer every step. Commands.com is the terminal-native
-version of "set it and forget it":
+Most agent tools want you babysitting every prompt. Commands.com runs a closed
+loop until your code earns the grade you asked for — or hits the safety cap.
 
 ```text
 audit -> synthesize -> plan fixes -> run implementers -> validate -> re-audit
 ```
 
-It writes everything to plain files under `.commands-com/runs/`: prompts,
-provider outputs, preflight checks, task status, resume state, Markdown reports,
-and the final summary.
+Everything lands in plain files under `.commands-com/runs/`: prompts, provider
+outputs, preflight checks, task status, resume state, Markdown reports, and the
+final summary. No daemon. No hosted state. Nothing you can't `cat`.
 
 The headline move:
 

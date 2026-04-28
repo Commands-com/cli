@@ -10,13 +10,13 @@
     "cli",
     "developer-tools"
   ],
-  "homepage": "https://github.com/Commands-com/commands-com#readme",
+  "homepage": "https://github.com/Commands-com/cli#readme",
   "bugs": {
-    "url": "https://github.com/Commands-com/commands-com/issues"
+    "url": "https://github.com/Commands-com/cli/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Commands-com/commands-com.git"
+    "url": "git+https://github.com/Commands-com/cli.git"
   },
   "exports": {
     "./package.json": "./package.json"
