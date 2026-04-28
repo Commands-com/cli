@@ -1,8 +1,9 @@
 import { runCycleWorkflow } from './cycle-workflow.js';
 import {
+  DEFAULT_REVIEW_FINAL_CYCLE,
+  finalCycleWithDefaults,
   formatReviewReport,
   reviewHasFinalIssues,
-  selectReviewFinalCycleWithFallback,
 } from './assessment-report.js';
 import {
   assessmentNeedsImplementation,
@@ -100,7 +101,10 @@ export async function runReviewCommand(parsed, { cwd, logger = createCommandLogg
     reportArtifactName: 'review-cycle',
     formatReport: formatReviewReport,
     formatReportOptions: { objective },
-    selectFinalCycle: selectReviewFinalCycleWithFallback,
+    selectFinalCycle: (cycles) => finalCycleWithDefaults(
+      Array.isArray(cycles) ? cycles.at(-1) : undefined,
+      DEFAULT_REVIEW_FINAL_CYCLE,
+    ),
     buildCompletionPayload: buildReviewCompletionPayload,
     hasFinalIssues: reviewHasFinalIssues,
   });

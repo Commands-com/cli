@@ -15,7 +15,6 @@ async function captureResolved(commandParsed) {
     cwd: '/unit/repo',
     dependencies: {
       runCycleWorkflow: async (_actualParsed, options) => {
-        calls.metadataAreas = options.metadata?.areas;
         const fanout = options.adapter.fanout({
           runContext: { options: {}, logger: { info: () => {} }, priorFindings: '' },
           cycle: 1,
@@ -29,51 +28,6 @@ async function captureResolved(commandParsed) {
   });
   return calls;
 }
-
-async function captureResolvedAreas(commandParsed) {
-  const { metadataAreas } = await captureResolved(commandParsed);
-  return metadataAreas;
-}
-
-test('runQualityCommand collapses areas that share a normalized artifact path key', async () => {
-  const areas = await captureResolvedAreas(parsed([], {
-    area: 'Correctness,correctness',
-    json: 'true',
-  }));
-  assert.deepEqual(areas, ['Correctness']);
-});
-
-test('runQualityCommand collapses mixed-punctuation duplicates that map to the same path segment', async () => {
-  const areas = await captureResolvedAreas(parsed([], {
-    area: 'foo bar,foo-bar,FOO__BAR',
-    json: 'true',
-  }));
-  assert.deepEqual(areas, ['foo bar']);
-});
-
-test('runQualityCommand preserves first-seen labels for unique areas interleaved with duplicates', async () => {
-  const areas = await captureResolvedAreas(parsed([], {
-    area: 'architecture,correctness,Architecture,tests',
-    json: 'true',
-  }));
-  assert.deepEqual(areas, ['architecture', 'correctness', 'tests']);
-});
-
-test('runQualityCommand collapses areas whose descriptor path segments collide via fallback', async () => {
-  const areas = await captureResolvedAreas(parsed([], {
-    area: 'area,!!!',
-    json: 'true',
-  }));
-  assert.deepEqual(areas, ['area']);
-});
-
-test('runQualityCommand keeps non-colliding areas even when one falls back to the default path segment', async () => {
-  const areas = await captureResolvedAreas(parsed([], {
-    area: 'item,!!!',
-    json: 'true',
-  }));
-  assert.deepEqual(areas, ['item', '!!!']);
-});
 
 test('runQualityCommand emits a single combined audit item with array value across multiple areas', async () => {
   const { auditItems } = await captureResolved(parsed([], {

@@ -13,7 +13,6 @@ import { ASSESSMENT_SUMMARY_CONTRACT } from './summary-contract.js';
  * @typedef {{ objective?: string, role: string, context: CycleRepoContext, cycle: number, priorFindings?: string }} BuildReviewPromptArgs
  * @typedef {{ objective: string, context: CycleRepoContext, cycle: number, reviewerOutputs: ReadonlyArray<AssessmentProviderOutput> }} BuildReviewSynthesisPromptArgs
  * @typedef {{ areas?: ReadonlyArray<string>, context: CycleRepoContext, changed?: boolean, cycle?: number, priorFindings?: string }} BuildQualityAuditPromptArgs
- * @typedef {{ area: string, context: CycleRepoContext, changed?: boolean, cycle?: number, priorFindings?: string }} BuildQualityPromptArgs
  * @typedef {{ areas: ReadonlyArray<string>, context: CycleRepoContext, cycle: number, outputs: ReadonlyArray<AssessmentProviderOutput> }} BuildQualitySynthesisPromptArgs
  */
 
@@ -346,17 +345,6 @@ export function buildQualityAuditPrompt({ areas, context, changed, cycle = 1, pr
       ? 'Scope: prioritize the current diff, but mention nearby structural issues when they affect the change.'
       : 'Scope: review the repository at a high level and prioritize high-leverage improvements.',
     context,
-    priorFindings,
-  });
-}
-
-/** @param {BuildQualityPromptArgs} args */
-export function buildQualityPrompt({ area, context, changed, cycle = 1, priorFindings = '' }) {
-  return buildQualityAuditPrompt({
-    areas: [area],
-    context,
-    changed,
-    cycle,
     priorFindings,
   });
 }

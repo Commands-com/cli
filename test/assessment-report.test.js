@@ -5,12 +5,17 @@ import {
   buildReviewCompletionPayload,
 } from '../src/assessment-completion.js';
 import {
+  DEFAULT_QUALITY_FINAL_CYCLE,
+  finalCycleWithDefaults,
   formatQualityReport,
   formatReviewReport,
   qualityHasFinalIssues,
   reviewHasFinalIssues,
-  selectQualityFinalCycleWithFallback,
 } from '../src/assessment-report.js';
+
+function selectQualityFinalCycle(cycles) {
+  return finalCycleWithDefaults(cycles?.at(-1), DEFAULT_QUALITY_FINAL_CYCLE);
+}
 
 /** @param {any} overrides @returns {any} */
 function baseState(overrides = {}) {
@@ -181,7 +186,7 @@ test('formatQualityReport preserves summary, synthesis, provider output, impleme
       },
     ],
   });
-  const finalCycle = selectQualityFinalCycleWithFallback(state.cycles);
+  const finalCycle = selectQualityFinalCycle(state.cycles);
 
   assert.equal(formatQualityReport(state, { finalCycle }), [
     '# Code Quality Report',
@@ -269,7 +274,7 @@ test('formatQualityReport summary header omits Fan-out failures when only histor
       },
     ],
   });
-  const finalCycle = selectQualityFinalCycleWithFallback(state.cycles);
+  const finalCycle = selectQualityFinalCycle(state.cycles);
 
   const report = formatQualityReport(state, { finalCycle });
   const header = report.split('## Cycle 1')[0];
@@ -297,7 +302,7 @@ test('formatQualityReport renders Fan-out failures count and lines for the final
       },
     ],
   });
-  const finalCycle = selectQualityFinalCycleWithFallback(state.cycles);
+  const finalCycle = selectQualityFinalCycle(state.cycles);
 
   const report = formatQualityReport(state, { finalCycle });
   const header = report.split('## Cycle 3')[0];
@@ -325,7 +330,7 @@ test('quality report helpers preserve empty-cycle fallback payload and report be
     },
   });
 
-  const finalCycle = selectQualityFinalCycleWithFallback(state.cycles);
+  const finalCycle = selectQualityFinalCycle(state.cycles);
   assert.equal(finalCycle.score, 'A');
   assert.equal(finalCycle.issueCount, 0);
   assert.equal(finalCycle.synopsis, 'No quality audit outputs were produced.');

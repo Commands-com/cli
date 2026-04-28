@@ -54,39 +54,30 @@ export const DEFAULT_REVIEW_FINAL_CYCLE = Object.freeze({
   reviewers: Object.freeze([]),
 });
 
-export function selectReviewFinalCycleWithFallback(cycles) {
-  return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, DEFAULT_REVIEW_FINAL_CYCLE);
-}
+const REVIEW_REPORT_MODE = {
+  perCycleIssueCountLabel: 'Reviewer issue count',
+  perCycleIssueCountKey: 'reviewerIssueCount',
+  itemsKey: 'reviewers',
+  itemFieldName: 'role',
+  fallback: DEFAULT_REVIEW_FINAL_CYCLE,
+};
 
-export function selectQualityFinalCycleWithFallback(cycles) {
-  return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, DEFAULT_QUALITY_FINAL_CYCLE);
-}
+const QUALITY_REPORT_MODE = {
+  perCycleIssueCountLabel: 'Provider issue count',
+  perCycleIssueCountKey: 'providerIssueCount',
+  itemsKey: 'outputs',
+  itemFieldName: 'area',
+  fallback: DEFAULT_QUALITY_FINAL_CYCLE,
+};
 
 /**
  * @param {CycleState} state
  * @param {{ objective?: string, finalCycle?: AssessmentFinalCycle }} [options]
  */
 export function formatReviewReport(state, { objective, finalCycle } = {}) {
-  const selectedFinalCycle = finalCycle || selectReviewFinalCycleWithFallback(state.cycles);
-  return formatAssessmentReport({
+  return formatAssessmentReportByMode(state, REVIEW_REPORT_MODE, {
     title: `Review Cycle: ${objective}`,
-    state,
-    summaryLines: [
-      `Score: ${selectedFinalCycle.score}`,
-      `Issue count: ${selectedFinalCycle.issueCount}`,
-      `Synopsis: ${selectedFinalCycle.synopsis}`,
-      ...fanoutFailuresSummaryLines(selectedFinalCycle),
-    ],
-    renderCycle: (cycle) => formatAssessmentCycle(cycle, {
-      summaryLines: [
-        `Score: ${cycle.score}`,
-        `Issue count: ${cycle.issueCount}`,
-        `Reviewer issue count: ${cycle.reviewerIssueCount}`,
-        `Synopsis: ${cycle.synopsis}`,
-      ],
-      itemSections: (cycle.reviewers || [])
-        .map((reviewer) => `### ${reviewer.provider} / ${reviewer.role}\n\n${reviewer.text}`),
-    }),
+    finalCycle,
   });
 }
 
@@ -95,9 +86,16 @@ export function formatReviewReport(state, { objective, finalCycle } = {}) {
  * @param {{ finalCycle?: AssessmentFinalCycle }} [options]
  */
 export function formatQualityReport(state, { finalCycle } = {}) {
-  const selectedFinalCycle = finalCycle || selectQualityFinalCycleWithFallback(state.cycles);
-  return formatAssessmentReport({
+  return formatAssessmentReportByMode(state, QUALITY_REPORT_MODE, {
     title: 'Code Quality Report',
+    finalCycle,
+  });
+}
+
+function formatAssessmentReportByMode(state, mode, { title, finalCycle }) {
+  const selectedFinalCycle = finalCycle || selectFinalCycle(state.cycles, mode.fallback);
+  return formatAssessmentReport({
+    title,
     state,
     summaryLines: [
       `Score: ${selectedFinalCycle.score}`,
@@ -109,13 +107,17 @@ export function formatQualityReport(state, { finalCycle } = {}) {
       summaryLines: [
         `Score: ${cycle.score}`,
         `Issue count: ${cycle.issueCount}`,
-        `Provider issue count: ${cycle.providerIssueCount}`,
+        `${mode.perCycleIssueCountLabel}: ${cycle[mode.perCycleIssueCountKey]}`,
         `Synopsis: ${cycle.synopsis}`,
       ],
-      itemSections: (cycle.outputs || [])
-        .map((output) => `### ${output.provider} / ${output.area}\n\n${output.text}`),
+      itemSections: (cycle[mode.itemsKey] || [])
+        .map((item) => `### ${item.provider} / ${item[mode.itemFieldName]}\n\n${item.text}`),
     }),
   });
+}
+
+function selectFinalCycle(cycles, fallback) {
+  return finalCycleWithDefaults(Array.isArray(cycles) ? cycles.at(-1) : undefined, fallback);
 }
 
 function fanoutFailuresSummaryLines(finalCycle) {
@@ -129,11 +131,11 @@ function fanoutFailuresSummaryLines(finalCycle) {
   ];
 }
 
-export function reviewHasFinalIssues(state, finalCycle = selectReviewFinalCycleWithFallback(state.cycles)) {
+export function reviewHasFinalIssues(state, finalCycle = selectFinalCycle(state.cycles, DEFAULT_REVIEW_FINAL_CYCLE)) {
   return assessmentCycleHasFinalIssues(state, finalCycle);
 }
 
-export function qualityHasFinalIssues(state, finalCycle = selectQualityFinalCycleWithFallback(state.cycles)) {
+export function qualityHasFinalIssues(state, finalCycle = selectFinalCycle(state.cycles, DEFAULT_QUALITY_FINAL_CYCLE)) {
   return assessmentCycleHasFinalIssues(state, finalCycle);
 }
 

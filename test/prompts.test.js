@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildQualityAuditPrompt,
-  buildQualityPrompt,
   buildQualitySynthesisPrompt,
   buildReviewPrompt,
   buildReviewSynthesisPrompt,
@@ -121,7 +120,7 @@ test('review prompt declares the YAML summary contract and intent metadata', () 
 });
 
 test('quality prompt declares the YAML summary contract and intent metadata', () => {
-  const prompt = buildQualityPrompt({ area: 'maintainability', context, changed: true });
+  const prompt = buildQualityAuditPrompt({ areas: ['maintainability'], context, changed: true });
   const body = promptBody(prompt);
 
   assertSummaryContractBlock(body);
@@ -262,8 +261,8 @@ test('all internal prompt builders emit parseable intent metadata', () => {
     },
     {
       label: 'quality prompt',
-      prompt: buildQualityPrompt({
-        area: 'performance',
+      prompt: buildQualityAuditPrompt({
+        areas: ['performance'],
         context,
         changed: false,
         cycle: 6,

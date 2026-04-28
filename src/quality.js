@@ -3,9 +3,10 @@ import {
 } from './artifact-paths.js';
 import { runCycleWorkflow } from './cycle-workflow.js';
 import {
+  DEFAULT_QUALITY_FINAL_CYCLE,
+  finalCycleWithDefaults,
   formatQualityReport,
   qualityHasFinalIssues,
-  selectQualityFinalCycleWithFallback,
 } from './assessment-report.js';
 import {
   assessmentNeedsImplementation,
@@ -95,7 +96,10 @@ export async function runQualityCommand(parsed, { cwd, logger = createCommandLog
     state,
     reportArtifactName: 'code-quality',
     formatReport: formatQualityReport,
-    selectFinalCycle: selectQualityFinalCycleWithFallback,
+    selectFinalCycle: (cycles) => finalCycleWithDefaults(
+      Array.isArray(cycles) ? cycles.at(-1) : undefined,
+      DEFAULT_QUALITY_FINAL_CYCLE,
+    ),
     buildCompletionPayload: buildQualityCompletionPayload,
     hasFinalIssues: qualityHasFinalIssues,
   });
@@ -103,13 +107,7 @@ export async function runQualityCommand(parsed, { cwd, logger = createCommandLog
 
 async function resolveQualityAreaDescriptors(parsed, cwd) {
   const areas = await loadQualityAreas(parsed, cwd);
-  const descriptors = createAssessmentFanoutItems(areas, { pathFallback: 'area' });
-  const seen = new Set();
-  return descriptors.filter((descriptor) => {
-    if (seen.has(descriptor.pathSegment)) return false;
-    seen.add(descriptor.pathSegment);
-    return true;
-  });
+  return createAssessmentFanoutItems(areas, { pathFallback: 'area' });
 }
 
 async function loadQualityAreas(parsed, cwd) {

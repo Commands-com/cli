@@ -14,21 +14,13 @@ import { isObjectRecord } from './objects.js';
 
 const RUN_STATE_FILE = 'run-state.json';
 export const RUN_STATE_VERSION = 1;
-const SENSITIVE_PROVIDER_FIELD_NAMES = new Set([
-  'api_key',
-  'authorization',
-  'authorization_header',
-  'auth_header',
-  'auth_token',
-  'cookie',
-  'password',
-  'passphrase',
-  'private_key',
-  'secret',
-  'token',
-]);
+const SENSITIVE_PROVIDER_FIELD_NAMES = new Set(['cookie', 'passphrase']);
 const SENSITIVE_PROVIDER_FIELD_SUFFIXES = Object.freeze([
   '_api_key',
+  '_auth_header',
+  '_auth_token',
+  '_authorization',
+  '_authorization_header',
   '_password',
   '_private_key',
   '_secret',
@@ -181,5 +173,7 @@ function isSensitiveProviderField(key) {
     .replace(/^_+|_+$/g, '')
     .toLowerCase();
   return SENSITIVE_PROVIDER_FIELD_NAMES.has(normalized)
-    || SENSITIVE_PROVIDER_FIELD_SUFFIXES.some((suffix) => normalized.endsWith(suffix));
+    || SENSITIVE_PROVIDER_FIELD_SUFFIXES.some(
+      (suffix) => normalized === suffix.slice(1) || normalized.endsWith(suffix),
+    );
 }
