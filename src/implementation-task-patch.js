@@ -21,7 +21,7 @@ import {
 /**
  * Result returned by `captureAndValidateTaskPatch`. The returned `task` may
  * be a repaired copy with additional `files` when the implementer
- * legitimately edited a sibling within scope.
+ * legitimately edited another in-repo file.
  *
  * @typedef {object} TaskPatchCapture
  * @property {ImplementationTask} task
@@ -59,6 +59,12 @@ export function emptyPatchInfo() {
 function repairedTaskForPatchValidation(task, error) {
   if (!(error instanceof TaskPatchValidationError)) return null;
   if (error.unassignedFiles.length !== error.validation.errors.length) return null;
+  // Intentional product behavior: the orchestrator's task `files` are an
+  // ownership hint for parallelism, but a captured patch is the exact truth.
+  // When the only violations are extra in-repo files, accept the useful work
+  // and expand ownership instead of spending another implementer cycle. Mixed
+  // validation errors still fail so outside-scope paths and CLI artifacts stay
+  // blocked by `validateTaskPatch`.
   const files = [...new Set([...(task.files || []), ...error.unassignedFiles])];
   if (files.length === (task.files || []).length) return null;
   return { ...task, files };

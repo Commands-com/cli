@@ -18,6 +18,7 @@ test('logger text mode writes lines, prefixed info, json, and errors', () => {
 
   logger.line('plain output');
   logger.info('started');
+  logger.warn('careful');
   logger.json({ ok: true });
   logger.error('failed');
 
@@ -30,14 +31,15 @@ test('logger text mode writes lines, prefixed info, json, and errors', () => {
       return false;
     }
   }), 'json payload should be parseable from stdout');
-  assert.deepEqual(stderr, ['failed']);
+  assert.deepEqual(stderr, ['careful', 'failed']);
 });
 
-test('logger json mode suppresses text output but still writes json and errors', () => {
+test('logger json mode suppresses text output but still writes json, warnings, and errors', () => {
   const { logger, stdout, stderr } = captureLogger({ json: true, kind: 'quality' });
 
   logger.line('plain output');
   logger.info('started');
+  logger.warn('careful');
   logger.json({ type: 'quality.completed' });
   logger.error('failed');
 
@@ -51,7 +53,7 @@ test('logger json mode suppresses text output but still writes json and errors',
       return false;
     }
   }), 'json payload should be parseable from stdout');
-  assert.deepEqual(stderr, ['failed']);
+  assert.deepEqual(stderr, ['careful', 'failed']);
 });
 
 test('child loggers inherit output streams and json mode with the child kind', () => {
@@ -66,6 +68,7 @@ test('child loggers inherit output streams and json mode with the child kind', (
   const child = parent.child('child');
 
   child.info('hidden');
+  child.warn('child warning');
   child.json({ child: true });
   child.error('child error');
 
@@ -79,7 +82,7 @@ test('child loggers inherit output streams and json mode with the child kind', (
       return false;
     }
   }), 'child json payload should reach stdout');
-  assert.deepEqual(stderr, ['child error']);
+  assert.deepEqual(stderr, ['child warning', 'child error']);
 });
 
 test('createCommandLogger enables json mode from parsed flags', () => {

@@ -3,6 +3,12 @@ import { StringDecoder } from 'node:string_decoder';
 import { DEFAULT_MAX_OUTPUT_BYTES, DEFAULT_TIMEOUT_MS, PROCESS_KILL_GRACE_MS } from './provider-limits.js';
 import { appendCapped } from './provider-output.js';
 
+// Outer fail-safe interval for `waitForCloseOnTimeout`. After SIGTERM and the
+// `PROCESS_KILL_GRACE_MS` SIGKILL grace, if the child's `close` event still
+// has not fired (e.g., a grandchild kept stdio inherited and open), force a
+// settle so the returned promise cannot hang forever.
+export const PROCESS_FORCE_SETTLE_GRACE_MS = 2_000;
+
 /**
  * @typedef {import('node:child_process').ChildProcess} ChildProcess
  * @typedef {import('node:child_process').StdioOptions} StdioOptions
@@ -19,6 +25,11 @@ import { appendCapped } from './provider-output.js';
  * @property {number} [maxOutputBytes]
  * @property {boolean} [windowsVerbatimArguments]
  * @property {boolean} [resolveOnTimeout]
+ * @property {boolean} [waitForCloseOnTimeout] When `resolveOnTimeout` is set,
+ *   defer the timeout settle until the child's 'close' event (after SIGTERM
+ *   then SIGKILL) so callers can be sure the previous child is no longer
+ *   running before they spawn a successor. Used for write-capable provider
+ *   invocations to prevent overlapping retries.
  *
  * @typedef {object} RunProcessResult
  * @property {boolean} ok
@@ -152,24 +163,41 @@ function createTimeoutController({
   child,
   timeoutMs,
   resolveOnTimeout,
+  waitForCloseOnTimeout,
   onTimeout,
   settle,
 }) {
   let killTimer = null;
+  let forceSettleTimer = null;
   const timer = setTimeout(() => {
     onTimeout();
     stopChild(child);
     killTimer = setTimeout(() => {
       forceStopChild(child);
+      // Outer fail-safe: if waitForCloseOnTimeout is set and `close` still
+      // hasn't fired after SIGKILL, force a settle so the promise cannot
+      // hang forever (e.g., grandchild keeps stdio inherited and open).
+      if (resolveOnTimeout && waitForCloseOnTimeout) {
+        forceSettleTimer = setTimeout(() => {
+          settle({ code: null });
+        }, PROCESS_FORCE_SETTLE_GRACE_MS);
+        if (typeof forceSettleTimer.unref === 'function') forceSettleTimer.unref();
+      }
     }, PROCESS_KILL_GRACE_MS);
     if (typeof killTimer.unref === 'function') killTimer.unref();
-    if (resolveOnTimeout) settle({ code: null }, { keepKillTimer: true });
+    // When waitForCloseOnTimeout is set, defer the resolve to the child's
+    // actual 'close' event so callers cannot spawn a successor while a
+    // write-capable child is still alive.
+    if (resolveOnTimeout && !waitForCloseOnTimeout) {
+      settle({ code: null }, { keepKillTimer: true });
+    }
   }, effectiveTimeout(timeoutMs));
 
   return {
     clear({ keepKillTimer = false } = {}) {
       clearTimeout(timer);
       if (killTimer && !keepKillTimer) clearTimeout(killTimer);
+      if (forceSettleTimer) clearTimeout(forceSettleTimer);
     },
   };
 }
@@ -198,6 +226,7 @@ export function runProcess({
   maxOutputBytes = DEFAULT_MAX_OUTPUT_BYTES,
   windowsVerbatimArguments = false,
   resolveOnTimeout = false,
+  waitForCloseOnTimeout = false,
 } = {}) {
   return new Promise((resolve) => {
     const capturedOutput = createCapturedOutput(maxOutputBytes);
@@ -250,6 +279,7 @@ export function runProcess({
       child,
       timeoutMs,
       resolveOnTimeout,
+      waitForCloseOnTimeout,
       onTimeout() {
         timedOut = true;
       },

@@ -5,7 +5,7 @@ import path from 'node:path';
 import {
   resolveCycleCommandOptions,
   resolveRoomCommandOptions,
-} from '../src/command-option-resolver.js';
+} from '../src/command-options.js';
 import { runCycleWorkflow } from '../src/cycle-workflow.js';
 import { tempDir } from './support/cli.js';
 

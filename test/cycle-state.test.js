@@ -82,32 +82,6 @@ test('createCycleState treats nested runtimeOptions as ordinary owned options', 
   assert.equal(Object.hasOwn(state, 'runtimeOptions'), false);
 });
 
-test('createCycleState treats non-record options as empty owned options', () => {
-  const state = createCycleState(baseStateArgs(null));
-
-  assert.deepEqual(state.options, {});
-});
-
-test('createCycleState normalizes stalledCycles as a finite non-negative number', () => {
-  const cases = [
-    { stalledCycles: 2.5, expected: 2.5 },
-    { stalledCycles: -1, expected: 0 },
-    { stalledCycles: Number.NaN, expected: 0 },
-    { stalledCycles: Number.POSITIVE_INFINITY, expected: 0 },
-    { stalledCycles: '4', expected: 0 },
-    { stalledCycles: null, expected: 0 },
-  ];
-
-  for (const { stalledCycles, expected } of cases) {
-    const state = createCycleState({
-      ...baseStateArgs({}),
-      stalledCycles,
-    });
-
-    assert.equal(state.stalledCycles, expected);
-  }
-});
-
 test('createCycleRunContext exposes adapter-readable state', () => {
   const provider = { id: 'mock' };
   const state = createCycleState({
@@ -317,16 +291,6 @@ test('createCycleRecorder preserves positive issue counts when tests fail', () =
 
   assert.equal(cycleRecord.issueCount, 3.5);
   assert.equal(cycleRecord.testIssueCount, 1);
-});
-
-test('createCycleRecorder ignores non-record cycle details', () => {
-  const state = createCycleState(baseStateArgs({}));
-  const recorder = createCycleRecorder(state);
-
-  const cycleRecord = recorder.beginCycle(3, null);
-
-  assert.deepEqual(cycleRecord, { cycle: 3 });
-  assert.deepEqual(state.cycles, [cycleRecord]);
 });
 
 test('createCyclePhaseView exposes shared phase dependencies without custom options', () => {

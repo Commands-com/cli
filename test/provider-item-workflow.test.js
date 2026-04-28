@@ -320,6 +320,272 @@ test('runProviderItem uses retry policy logMessage output when provided', { skip
   }
 });
 
+test('runProviderItem propagates non-session errors without clearing resumeSessionId', { skip: process.platform === 'win32' }, async () => {
+  const dir = await tempDir();
+  try {
+    const bin = path.join(dir, 'codex');
+    const callCountPath = `${bin}.count`;
+    await writeExecutable(bin, [
+      '#!/bin/sh',
+      `count_file=${shSingleQuote(callCountPath)}`,
+      'if [ -f "$count_file" ]; then',
+      '  read n < "$count_file"',
+      'else',
+      '  n=0',
+      'fi',
+      'n=$((n + 1))',
+      'printf \'%s\\n\' "$n" > "$count_file"',
+      `printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'error',
+        message: 'provider tool failure: temporary backend hiccup',
+      }))}`,
+      'exit 1',
+    ]);
+
+    const sessionInvalidCalls = [];
+    const sessionCalls = [];
+
+    await assert.rejects(
+      runProviderItem({
+        provider: { id: 'codex', command: bin },
+        label: 'maintainability',
+        prompt: 'prompt',
+        artifacts: memoryArtifacts(),
+        cwd: dir,
+        timeoutMs: 5_000,
+        retry: { retries: 0 },
+        session: {
+          resumeSessionId: 'preserved-session-id',
+          onSessionInvalid: async (payload) => {
+            sessionInvalidCalls.push(payload);
+          },
+          onSession: async (payload) => {
+            sessionCalls.push(payload);
+          },
+        },
+      }),
+      /codex exited with 1/,
+    );
+
+    assert.deepEqual(sessionInvalidCalls, []);
+    assert.deepEqual(sessionCalls, []);
+    const callCount = Number((await fs.readFile(callCountPath, 'utf8')).trim());
+    assert.equal(callCount, 1, 'fresh-session retry must not run when error is not a session error');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('runProviderItem treats invalid-session errors as recoverable and retries fresh', { skip: process.platform === 'win32' }, async () => {
+  const dir = await tempDir();
+  try {
+    const bin = path.join(dir, 'codex');
+    await writeExecutable(bin, [
+      '#!/bin/sh',
+      'count_file="$0.count"',
+      'if [ -f "$count_file" ]; then',
+      '  read n < "$count_file"',
+      'else',
+      '  n=0',
+      'fi',
+      'n=$((n + 1))',
+      'printf \'%s\\n\' "$n" > "$count_file"',
+      'if [ "$n" -eq 1 ]; then',
+      `  printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'error',
+        message: 'session not found for the supplied id',
+      }))}`,
+      '  exit 1',
+      'fi',
+      `printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'fresh session text' },
+      }))}`,
+    ]);
+
+    const sessionInvalidCalls = [];
+
+    const result = await runProviderItem({
+      provider: { id: 'codex', command: bin },
+      label: 'maintainability',
+      prompt: 'prompt',
+      artifacts: memoryArtifacts(),
+      cwd: dir,
+      timeoutMs: 5_000,
+      retry: { retries: 0 },
+      session: {
+        resumeSessionId: 'stale-session-id',
+        onSessionInvalid: async (payload) => {
+          sessionInvalidCalls.push(payload);
+        },
+      },
+    });
+
+    assert.equal(result.text, 'fresh session text');
+    assert.equal(sessionInvalidCalls.length, 1);
+    assert.match(sessionInvalidCalls[0].error.message, /session not found/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('runProviderItem retries fresh when the session error uses reversed phrasing', { skip: process.platform === 'win32' }, async () => {
+  const dir = await tempDir();
+  try {
+    const bin = path.join(dir, 'codex');
+    await writeExecutable(bin, [
+      '#!/bin/sh',
+      'count_file="$0.count"',
+      'if [ -f "$count_file" ]; then',
+      '  read n < "$count_file"',
+      'else',
+      '  n=0',
+      'fi',
+      'n=$((n + 1))',
+      'printf \'%s\\n\' "$n" > "$count_file"',
+      'if [ "$n" -eq 1 ]; then',
+      `  printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'error',
+        message: 'invalid session id',
+      }))}`,
+      '  exit 1',
+      'fi',
+      `printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'fresh after reversed phrasing' },
+      }))}`,
+    ]);
+
+    const sessionInvalidCalls = [];
+
+    const result = await runProviderItem({
+      provider: { id: 'codex', command: bin },
+      label: 'maintainability',
+      prompt: 'prompt',
+      artifacts: memoryArtifacts(),
+      cwd: dir,
+      timeoutMs: 5_000,
+      retry: { retries: 0 },
+      session: {
+        resumeSessionId: 'stale-session-id',
+        onSessionInvalid: async (payload) => {
+          sessionInvalidCalls.push(payload);
+        },
+      },
+    });
+
+    assert.equal(result.text, 'fresh after reversed phrasing');
+    assert.equal(sessionInvalidCalls.length, 1);
+    assert.match(sessionInvalidCalls[0].error.message, /invalid session id/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('runProviderItem retries fresh when the provider reports thread not found', { skip: process.platform === 'win32' }, async () => {
+  const dir = await tempDir();
+  try {
+    const bin = path.join(dir, 'codex');
+    await writeExecutable(bin, [
+      '#!/bin/sh',
+      'count_file="$0.count"',
+      'if [ -f "$count_file" ]; then',
+      '  read n < "$count_file"',
+      'else',
+      '  n=0',
+      'fi',
+      'n=$((n + 1))',
+      'printf \'%s\\n\' "$n" > "$count_file"',
+      'if [ "$n" -eq 1 ]; then',
+      `  printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'error',
+        message: 'thread not found',
+      }))}`,
+      '  exit 1',
+      'fi',
+      `printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'item.completed',
+        item: { type: 'agent_message', text: 'fresh after thread not found' },
+      }))}`,
+    ]);
+
+    const sessionInvalidCalls = [];
+
+    const result = await runProviderItem({
+      provider: { id: 'codex', command: bin },
+      label: 'maintainability',
+      prompt: 'prompt',
+      artifacts: memoryArtifacts(),
+      cwd: dir,
+      timeoutMs: 5_000,
+      retry: { retries: 0 },
+      session: {
+        resumeSessionId: 'stale-thread-id',
+        onSessionInvalid: async (payload) => {
+          sessionInvalidCalls.push(payload);
+        },
+      },
+    });
+
+    assert.equal(result.text, 'fresh after thread not found');
+    assert.equal(sessionInvalidCalls.length, 1);
+    assert.match(sessionInvalidCalls[0].error.message, /thread not found/);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('runProviderItem propagates ETIMEDOUT errors without taking the fresh-session retry path', { skip: process.platform === 'win32' }, async () => {
+  const dir = await tempDir();
+  try {
+    const bin = path.join(dir, 'codex');
+    const callCountPath = `${bin}.count`;
+    await writeExecutable(bin, [
+      '#!/bin/sh',
+      `count_file=${shSingleQuote(callCountPath)}`,
+      'if [ -f "$count_file" ]; then',
+      '  read n < "$count_file"',
+      'else',
+      '  n=0',
+      'fi',
+      'n=$((n + 1))',
+      'printf \'%s\\n\' "$n" > "$count_file"',
+      `printf '%s\\n' ${shSingleQuote(JSON.stringify({
+        type: 'error',
+        message: 'ETIMEDOUT while streaming response',
+      }))}`,
+      'exit 1',
+    ]);
+
+    const sessionInvalidCalls = [];
+
+    await assert.rejects(
+      runProviderItem({
+        provider: { id: 'codex', command: bin },
+        label: 'maintainability',
+        prompt: 'prompt',
+        artifacts: memoryArtifacts(),
+        cwd: dir,
+        timeoutMs: 5_000,
+        retry: { retries: 0 },
+        session: {
+          resumeSessionId: 'preserved-session-id',
+          onSessionInvalid: async (payload) => {
+            sessionInvalidCalls.push(payload);
+          },
+        },
+      }),
+      /codex exited with 1/,
+    );
+
+    assert.deepEqual(sessionInvalidCalls, []);
+    const callCount = Number((await fs.readFile(callCountPath, 'utf8')).trim());
+    assert.equal(callCount, 1, 'transient ETIMEDOUT must not trigger the fresh-session retry path');
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('runProviderItem writes retry artifacts through artifactPolicy.writeRetry before retry logging', { skip: process.platform === 'win32' }, async () => {
   const dir = await tempDir();
   try {

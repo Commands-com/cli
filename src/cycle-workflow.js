@@ -1,9 +1,8 @@
 import {
+  filterKnownStoredCycleOptions,
+  hasAnyFlag,
   projectCycleCommandOptions,
   resolveCycleCommandOptions,
-} from './command-option-resolver.js';
-import {
-  hasAnyFlag,
   stringOption,
 } from './command-options.js';
 import { COMMAND_OPTIONS } from './command-option-schema.js';
@@ -74,7 +73,7 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  * @typedef {Object} ResolveCycleOptionsArgs
  * @property {string} cwd Command working directory.
  * @property {Object} [commandOptions] Pre-resolved cycle command options.
- * @property {Object} [resumeOptions] Resume state options used to derive provider defaults.
+ * @property {Object} [resumeOptions] Stored resume options used to short-circuit provider discovery.
  */
 
 /**
@@ -97,14 +96,6 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  * @property {RunCycleWorkflowDependencies} [dependencies] Optional test seams.
  */
 
-// Phase modules keep artifact writes centralized through:
-// cycleProviderItemArtifactDescriptor({ cycle, artifactRoot, provider, item })
-// cyclePromptArtifactPath(cycle, 'synthesis', provider.id)
-// cycleMarkdownArtifactPath(cycle, 'synthesis')
-// cycleMarkdownArtifactPath(cycle, 'synthesis-error')
-// cycleArtifactPath(cycle, 'test.log')
-// cycleMarkdownArtifactPath(cycle, 'post-implementation-context')
-
 /**
  * Resolve and own all runtime options needed by cycle modules.
  *
@@ -124,6 +115,35 @@ async function resolveCycleOptions(parsed, { cwd, commandOptions = resolveCycleC
     model: runtimeOptions.model,
     ...commandOptions,
   };
+}
+
+function shouldUseResumeProviders(flags, commandOptions, providerOptions) {
+  return Boolean(commandOptions?.resume)
+    && !hasAnyFlag(flags, ['provider', 'providers'])
+    && Boolean(providerOptions);
+}
+
+function resumeProviderOptions(options) {
+  const source = options && typeof options === 'object' ? options : {};
+  const providers = Array.isArray(source.providers)
+    ? source.providers.filter(isProviderRecord)
+    : [];
+  if (!providers.length) return null;
+  const primaryProvider = isProviderRecord(source.primaryProvider)
+    ? source.primaryProvider
+    : providers[0];
+  const providerIds = Array.isArray(source.providerIds)
+    ? source.providerIds.map((providerId) => String(providerId || '').trim()).filter(Boolean)
+    : providers.map((provider) => provider.id);
+  return {
+    providers,
+    primaryProvider,
+    providerIds: providerIds.length ? providerIds : providers.map((provider) => provider.id),
+  };
+}
+
+function isProviderRecord(provider) {
+  return Boolean(provider && typeof provider === 'object' && typeof provider.id === 'string' && provider.id.trim());
 }
 
 async function resolveProviderOptions(flags, runtimeOptions) {
@@ -166,7 +186,8 @@ export async function runCycleWorkflow(parsed, {
     resumeOptions: resume?.state.options,
   });
   if (resume) {
-    options = mergeResumeOptions(resume.state.options, options, parsed.flags);
+    const knownStored = filterKnownStoredCycleOptions(resume.state.options, { logger });
+    options = mergeResumeOptions(knownStored, options, parsed.flags);
   }
 
   const { store, context: originalContext } = resume
@@ -278,35 +299,6 @@ function resumeWorkspace(workspace, context) {
     mode: WORKSPACE_MODES.CURRENT,
     cwd: context.repoRoot,
   };
-}
-
-function shouldUseResumeProviders(flags, commandOptions, providerOptions) {
-  return Boolean(commandOptions?.resume)
-    && !hasAnyFlag(flags, ['provider', 'providers'])
-    && Boolean(providerOptions);
-}
-
-function resumeProviderOptions(options) {
-  const source = options && typeof options === 'object' ? options : {};
-  const providers = Array.isArray(source.providers)
-    ? source.providers.filter(isProviderRecord)
-    : [];
-  if (!providers.length) return null;
-  const primaryProvider = isProviderRecord(source.primaryProvider)
-    ? source.primaryProvider
-    : providers[0];
-  const providerIds = Array.isArray(source.providerIds)
-    ? source.providerIds.map((providerId) => String(providerId || '').trim()).filter(Boolean)
-    : providers.map((provider) => provider.id);
-  return {
-    providers,
-    primaryProvider,
-    providerIds: providerIds.length ? providerIds : providers.map((provider) => provider.id),
-  };
-}
-
-function isProviderRecord(provider) {
-  return Boolean(provider && typeof provider === 'object' && typeof provider.id === 'string' && provider.id.trim());
 }
 
 export function mergeResumeOptions(storedOptions, nextOptions, flags) {

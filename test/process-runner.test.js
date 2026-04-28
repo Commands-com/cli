@@ -4,7 +4,8 @@ import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { syncBuiltinESMExports } from 'node:module';
 import { PassThrough } from 'node:stream';
-import { runProcess } from '../src/process-runner.js';
+import { PROCESS_FORCE_SETTLE_GRACE_MS, runProcess } from '../src/process-runner.js';
+import { PROCESS_KILL_GRACE_MS } from '../src/provider-limits.js';
 
 let mockedProcessRunnerImportId = 0;
 
@@ -189,6 +190,91 @@ test('runProcess detaches data listeners after a timeout-resolve settle so post-
 
   assert.equal(result.stdout, 'captured-out');
   assert.equal(result.stderr, 'captured-err');
+});
+
+test('runProcess defers timeout settle until child close when waitForCloseOnTimeout is set', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+
+  const signals = [];
+  const child = createMockChild({
+    kill(signal) {
+      signals.push(signal);
+      return true;
+    },
+  });
+  const { runProcess: runMockedProcess } = await importProcessRunnerWithMockedSpawn(t, () => child);
+
+  const resultPromise = runMockedProcess({
+    command: 'mocked-command',
+    timeoutMs: 10,
+    resolveOnTimeout: true,
+    waitForCloseOnTimeout: true,
+  });
+
+  let settled = false;
+  resultPromise.then(() => { settled = true; }, () => { settled = true; });
+
+  t.mock.timers.tick(10);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM']);
+  assert.equal(settled, false);
+
+  t.mock.timers.tick(PROCESS_KILL_GRACE_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(settled, false);
+
+  child.emit('close', null, 'SIGKILL');
+  const result = await resultPromise;
+
+  assert.equal(settled, true);
+  assert.equal(result.timedOut, true);
+  assert.equal(result.exitCode, 124);
+  assert.equal(result.signal, 'SIGKILL');
+});
+
+test('runProcess force-settles waitForCloseOnTimeout when child close never fires after SIGKILL', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+
+  const signals = [];
+  const child = createMockChild({
+    kill(signal) {
+      signals.push(signal);
+      return true;
+    },
+  });
+  const { runProcess: runMockedProcess } = await importProcessRunnerWithMockedSpawn(t, () => child);
+
+  const resultPromise = runMockedProcess({
+    command: 'mocked-command',
+    timeoutMs: 10,
+    resolveOnTimeout: true,
+    waitForCloseOnTimeout: true,
+  });
+
+  let settled = false;
+  resultPromise.then(() => { settled = true; }, () => { settled = true; });
+
+  t.mock.timers.tick(10);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM']);
+  assert.equal(settled, false);
+
+  t.mock.timers.tick(PROCESS_KILL_GRACE_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(settled, false);
+
+  t.mock.timers.tick(PROCESS_FORCE_SETTLE_GRACE_MS);
+  const result = await resultPromise;
+
+  assert.equal(settled, true);
+  assert.equal(result.timedOut, true);
+  assert.equal(result.exitCode, 124);
+  assert.equal(result.code, null);
+  assert.equal(result.signal, null);
 });
 
 test('runProcess clears a retained timeout kill timer when the child later closes', async (t) => {

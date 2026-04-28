@@ -159,7 +159,7 @@ export async function runProviderItem(args = {}) {
     try {
       result = await run(session.resumeSessionId);
     } catch (error) {
-      if (!session.resumeSessionId) throw error;
+      if (!session.resumeSessionId || !isInvalidSessionError(error)) throw error;
       await session.onSessionInvalid?.(providerItemHookPayload({ provider, label, artifacts, error }));
       logger.info?.(`${provider.id}/${label}: provider session invalid; retrying fresh`);
       result = await run('');
@@ -267,4 +267,23 @@ function defaultRetryLogMessage({
   retries,
 }) {
   return `${provider.id}/${label}: retry ${retry}/${retries} after transient provider failure`;
+}
+
+// Codex/Claude/Gemini do not surface a structured invalid-session signal
+// today; stale/unknown session ids land as free-text inside the generic
+// non-zero-exit error wrapped by src/providers.js (sourced from stderr or
+// the codex JSONL `error` events parsed in src/codex-jsonl.js and
+// src/provider-output.js). Match any of the session-related nouns
+// (session/thread/conversation/resume) paired with an invalidating term
+// (invalid/expired/not found/unknown) in either order so reversed
+// phrasings like "invalid session id" and provider-specific phrasings
+// like "thread not found" trigger the fresh-session retry path. Stay
+// conservative: transient/tool failures (ETIMEDOUT, capacity, rate
+// limit, stream disconnects) match neither side and keep the saved
+// session id, falling through to the surrounding withRetries layer.
+const INVALID_SESSION_PATTERN = /\b(?:session|thread|conversation|resume)\b[^\n]{0,120}?\b(?:invalid|expired|not\s+found|unknown)\b|\b(?:invalid|expired|not\s+found|unknown)\b[^\n]{0,120}?\b(?:session|thread|conversation|resume)\b/i;
+
+function isInvalidSessionError(error) {
+  if (!error) return false;
+  return INVALID_SESSION_PATTERN.test(String(error.message || error));
 }

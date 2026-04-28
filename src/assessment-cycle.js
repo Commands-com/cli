@@ -128,7 +128,8 @@ import { writeRunState } from './run-state.js';
  */
 
 /**
- * Fresh per-cycle context shared with assessment adapter hooks.
+ * Fresh per-cycle context shared with `logCycleStart` and `fanout` hooks (and
+ * returned by `createAssessmentCycleContext`).
  *
  * @typedef {object} AssessmentCycleContext
  * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
@@ -137,48 +138,66 @@ import { writeRunState } from './run-state.js';
  */
 
 /**
- * Cycle context with raw provider outputs added (after fan-out).
+ * Args passed to `summarizeOutputs` and `buildSynthesisPrompt` after fan-out.
  *
- * @typedef {AssessmentCycleContext & { outputs: Array<AssessmentCycleProviderOutput> }} AssessmentCycleOutputsContext
+ * @typedef {object} AssessmentCycleOutputsContext
+ * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
+ * @property {number} cycle One-based cycle number.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ * @property {Array<AssessmentCycleProviderOutput>} outputs Raw provider outputs from fan-out.
  */
 
 /**
- * Cycle context with the synthesis text added (after synthesis).
+ * Args passed to `summarizeSynthesis` once synthesis text is available.
  *
- * @typedef {AssessmentCycleOutputsContext & {
- *   outputSummary: AssessmentCycleSummary,
- *   synthesisText: string,
- * }} AssessmentCycleSynthesisContext
+ * @typedef {object} AssessmentCycleSynthesisContext
+ * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
+ * @property {number} cycle One-based cycle number.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ * @property {Array<AssessmentCycleProviderOutput>} outputs Raw provider outputs from fan-out.
+ * @property {AssessmentCycleSummary} outputSummary Aggregate summary of raw provider outputs.
+ * @property {string} synthesisText Synthesis text produced by `runSynthesisWithFallback`.
  */
 
 /**
- * Cycle context handed to `buildCycleRecord` once synthesis has run.
+ * Args passed to `buildCycleRecord` once synthesis has run.
  *
- * @typedef {AssessmentCycleSynthesisContext & {
- *   cycleSummary: AssessmentCycleSummary,
- *   synthesisProvider: string,
- *   synthesisError: string,
- * }} AssessmentCycleRecordContext
+ * @typedef {object} AssessmentCycleRecordContext
+ * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
+ * @property {number} cycle One-based cycle number.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ * @property {Array<AssessmentCycleProviderOutput>} outputs Raw provider outputs from fan-out.
+ * @property {AssessmentCycleSummary} outputSummary Aggregate summary of raw provider outputs.
+ * @property {AssessmentCycleSummary} cycleSummary Final cycle summary (synthesis-derived when present, else `outputSummary`).
+ * @property {string} synthesisProvider Provider id that produced the synthesis text.
+ * @property {string} synthesisText Synthesis text produced by `runSynthesisWithFallback`.
+ * @property {string} synthesisError Error message captured during synthesis (empty when none).
  */
 
 /**
- * Cycle context handed to post-record hooks (`hasFixableIssues`,
- * `implementation`).
+ * Args passed to post-record hooks (`hasFixableIssues`, `implementation`).
  *
- * @typedef {AssessmentCycleContext & { cycleRecord: CycleRecord }} AssessmentCycleAfterContext
+ * @typedef {object} AssessmentCycleAfterContext
+ * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
+ * @property {number} cycle One-based cycle number.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ * @property {CycleRecord} cycleRecord Cycle record produced by the recorder.
  */
 
 /**
- * Full cycle context handed to the optional `afterCycle` hook.
+ * Args passed to the optional `afterCycle` hook with the full cycle context.
  *
- * @typedef {AssessmentCycleAfterContext & {
- *   outputs: Array<AssessmentCycleProviderOutput>,
- *   outputSummary: AssessmentCycleSummary,
- *   cycleSummary: AssessmentCycleSummary,
- *   synthesisProvider: string,
- *   synthesisText: string,
- *   synthesisError: string,
- * }} AssessmentCycleAfterCycleContext
+ * @typedef {object} AssessmentCycleAfterCycleContext
+ * @property {CycleRunContext} runContext Canonical read-only run context captured for this hook.
+ * @property {number} cycle One-based cycle number.
+ * @property {CycleRepoContext} context Same repository context object as `runContext.context`.
+ * @property {Array<AssessmentCycleProviderOutput>} outputs Raw provider outputs from fan-out.
+ * @property {AssessmentCycleSummary} outputSummary Aggregate summary of raw provider outputs.
+ * @property {AssessmentCycleSummary} cycleSummary Final cycle summary (synthesis-derived when present, else `outputSummary`).
+ * @property {CycleRecord} cycleRecord Cycle record produced by the recorder.
+ * @property {string} synthesisProvider Provider id that produced the synthesis text.
+ * @property {string} synthesisText Synthesis text produced by `runSynthesisWithFallback`.
+ * @property {string} synthesisError Error message captured during synthesis (empty when none).
  */
 
 /**

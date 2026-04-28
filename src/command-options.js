@@ -4,11 +4,14 @@ import {
   COMMON,
   HELP_COMMANDS,
   OPTION_READER_NAMES,
+  OPTION_RESOLVER,
+  OPTION_RESOLVER_FIELD_GROUP,
   OPTION_SCOPES,
   SCOPED_OPTION_COMMANDS,
 } from './command-option-schema.js';
 import { REGISTERED_DISPATCH_NAMES } from './command-registry.js';
 import { UsageError } from './errors.js';
+import { SCORE_ORDER } from './summary-contract.js';
 
 const ALL_FLAGS = new Set(ALL_FLAG_NAMES);
 const HELP_FLAG_NAMES = Object.freeze(['help']);
@@ -238,4 +241,158 @@ export function formatScopedOptionsHelp(scopes = OPTION_SCOPES) {
   return scopes
     .map((scope) => `${scope.title}:\n${formatOptionsHelpForScope(scope.name)}`)
     .join('\n\n');
+}
+
+const {
+  CYCLE: CYCLE_RESOLVER,
+  ROOM: ROOM_RESOLVER,
+} = OPTION_RESOLVER;
+
+const {
+  SHARED_WORKFLOW,
+  CYCLE_COMMAND,
+  FANOUT_MODE,
+  ROOM_COMMAND,
+} = OPTION_RESOLVER_FIELD_GROUP;
+
+const CYCLE_OPTION_FIELDS = fieldsForResolver(CYCLE_RESOLVER);
+const ROOM_OPTION_FIELDS = fieldsForResolver(ROOM_RESOLVER);
+
+const CYCLE_SHARED_WORKFLOW_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, SHARED_WORKFLOW);
+const ROOM_SHARED_WORKFLOW_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, SHARED_WORKFLOW);
+const CYCLE_COMMAND_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, CYCLE_COMMAND);
+const ROOM_COMMAND_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, ROOM_COMMAND);
+const CYCLE_FANOUT_MODE_OPTION_FIELDS = fieldsForGroup(CYCLE_OPTION_FIELDS, FANOUT_MODE);
+const ROOM_FANOUT_MODE_OPTION_FIELDS = fieldsForGroup(ROOM_OPTION_FIELDS, FANOUT_MODE);
+
+const CYCLE_FIELD_NAMES = Object.freeze([...new Set(CYCLE_OPTION_FIELDS.map((field) => field.field))]);
+
+// Fields a stored cycle run is allowed to carry into a resume merge: the cycle
+// resolver's own fields plus any field that any option declares as a
+// resume-override target (covers `model` and provider fields not bound to a
+// cycle resolver). Anything else is dropped by `filterKnownStoredCycleOptions`
+// with a one-line warn so stale stored runs don't silently leak through.
+const KNOWN_STORED_CYCLE_FIELDS = Object.freeze(new Set([
+  ...CYCLE_FIELD_NAMES,
+  ...COMMAND_OPTIONS.flatMap((option) => option.resumeOverrideFields ?? []),
+]));
+
+export function resolveCycleCommandOptions(flags) {
+  const cycleOptions = resolveOptionFields(flags, CYCLE_COMMAND_OPTION_FIELDS);
+  const mode = resolveFanoutMode(flags, {
+    defaultParallel: true,
+    allowSerial: true,
+  });
+
+  return normalizeCycleCommandOptions({
+    ...resolveOptionFields(flags, CYCLE_SHARED_WORKFLOW_OPTION_FIELDS),
+    ...cycleOptions,
+    ...mode,
+  });
+}
+
+export function resolveRoomCommandOptions(flags, {
+  participantCount = 0,
+  json = false,
+} = {}) {
+  const participantFallback = Math.max(0, participantCount);
+  const roomOptions = resolveOptionFields(flags, ROOM_COMMAND_OPTION_FIELDS, { participantFallback });
+  const requestedLimit = roomOptions.requestedParticipantLimit;
+  const participantLimit = Math.min(requestedLimit, participantFallback);
+  const mode = resolveFanoutMode(flags, {
+    defaultParallel: false,
+    allowSerial: false,
+  });
+
+  return {
+    ...resolveOptionFields(flags, ROOM_SHARED_WORKFLOW_OPTION_FIELDS),
+    json,
+    parallel: mode.parallel,
+    synthesize: !roomOptions.noSynthesis,
+    participantLimit,
+  };
+}
+
+export function projectCycleCommandOptions(options) {
+  const source = options && typeof options === 'object' ? options : {};
+  return Object.fromEntries(CYCLE_FIELD_NAMES.map((field) => [field, source[field]]));
+}
+
+/**
+ * Drop unknown fields from a stored resume payload before merging it back in.
+ * Recognized fields layer per the precedence rule (explicit CLI flag > stored
+ * resume > env > config > schema default); unrecognized fields are dropped
+ * with a single one-line `logger.warn` per stored run so older run-state
+ * payloads can't silently leak removed fields through the resume merge.
+ *
+ * @param {Object|null|undefined} storedOptions
+ * @param {{ logger?: { info?: (message: string) => void, warn?: (message: string) => void } }} [options]
+ */
+export function filterKnownStoredCycleOptions(storedOptions, { logger } = {}) {
+  if (!storedOptions || typeof storedOptions !== 'object') return {};
+  const known = {};
+  const unknown = [];
+  for (const [key, value] of Object.entries(storedOptions)) {
+    if (KNOWN_STORED_CYCLE_FIELDS.has(key)) known[key] = value;
+    else unknown.push(key);
+  }
+  if (unknown.length && typeof logger?.warn === 'function') {
+    logger.warn(`resume: ignoring stored field${unknown.length === 1 ? '' : 's'} ${unknown.map((name) => `'${name}'`).join(', ')} (no longer in schema)`);
+  }
+  return known;
+}
+
+function resolveFanoutMode(flags, { defaultParallel = false, allowSerial = true } = {}) {
+  const fields = allowSerial ? CYCLE_FANOUT_MODE_OPTION_FIELDS : ROOM_FANOUT_MODE_OPTION_FIELDS;
+  const { serial = false, parallel = false } = resolveOptionFields(flags, fields);
+  return {
+    serial,
+    parallel: !serial && (parallel || Boolean(defaultParallel)),
+  };
+}
+
+function resolveOptionFields(flags, fields, context = {}) {
+  const options = {};
+  for (const field of fields) {
+    const fallback = resolveOptionFallback(field.fallback, { ...context, options });
+    options[field.field] = readCommandOptionValue(flags, field.option, fallback);
+  }
+  return options;
+}
+
+function resolveOptionFallback(fallback, context) {
+  return typeof fallback === 'function' ? fallback(context) : fallback;
+}
+
+function fieldsForResolver(resolver) {
+  return Object.freeze(COMMAND_OPTIONS.flatMap((option) => (
+    option.resolve
+      .filter((field) => field.resolver === resolver)
+      .map((field) => Object.freeze({
+        option: option.name,
+        field: field.field,
+        fallback: field.fallback,
+        group: field.group,
+      }))
+  )));
+}
+
+function fieldsForGroup(fields, group) {
+  return Object.freeze(fields.filter((field) => field.group === group));
+}
+
+function normalizeCycleCommandOptions(options) {
+  return {
+    ...options,
+    untilScore: normalizeUntilScore(options.untilScore),
+  };
+}
+
+function normalizeUntilScore(value) {
+  const score = String(value || '').trim().toUpperCase();
+  if (!score) return '';
+  if (!SCORE_ORDER.includes(score)) {
+    throw new UsageError(`--until must be one of ${SCORE_ORDER.join(', ')}`);
+  }
+  return score;
 }

@@ -1,6 +1,5 @@
 import { createLogger } from './logger.js';
 import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
-import { isObjectRecord } from './objects.js';
 
 /**
  * Provider descriptor used by cycle fan-out, synthesis, and implementation.
@@ -228,22 +227,21 @@ export function createCycleState({
   stalledCycles = 0,
   stopReason = '',
 }) {
-  const ownedOptions = createOwnedCycleOptions(options);
-  const state = {
+  const ownedOptions = /** @type {CycleRuntimeOptions} */ ({ ...options });
+  return {
     kind,
     store,
     workspace,
     context,
     options: ownedOptions,
     logger: logger || createLogger({ json: ownedOptions.json, kind }),
-    cycles: Array.isArray(cycles) ? cycles : [],
-    providerSessions: normalizeProviderSessions(providerSessions),
-    priorFindings: priorFindings || '',
-    hasUnresolvedTestFailure: Boolean(hasUnresolvedTestFailure),
-    stalledCycles: normalizeFiniteNonNegativeNumber(stalledCycles),
-    stopReason: stopReason || '',
+    cycles,
+    providerSessions,
+    priorFindings,
+    hasUnresolvedTestFailure,
+    stalledCycles,
+    stopReason,
   };
-  return state;
 }
 
 export function createCycleRunContext(state) {
@@ -294,15 +292,6 @@ export function createCyclePhaseView(state) {
   });
 }
 
-function normalizeProviderSessions(providerSessions) {
-  if (!isObjectRecord(providerSessions)) return {};
-  return Object.fromEntries(
-    Object.entries(providerSessions)
-      .map(([key, value]) => [String(key), String(value || '').trim()])
-      .filter(([key, value]) => key && value),
-  );
-}
-
 export function createCycleRecorder(state) {
   return Object.freeze({
     get priorFindings() {
@@ -318,15 +307,6 @@ export function createCycleRecorder(state) {
       return applyImplementationResult(state, cycleRecord, implementationResult, options);
     },
   });
-}
-
-function createOwnedCycleOptions(options) {
-  if (!isObjectRecord(options)) return {};
-  return { ...options };
-}
-
-function normalizeImplementationResult(implementation) {
-  return isObjectRecord(implementation) ? implementation : {};
 }
 
 function createCycleRecord(cycle, details) {
@@ -357,14 +337,13 @@ function setUnresolvedTestFailure(state, value) {
   return state.hasUnresolvedTestFailure;
 }
 
-function recordImplementation(cycleRecord, implementation) {
-  const result = normalizeImplementationResult(implementation);
+function recordImplementation(cycleRecord, implementation = {}) {
   return applyCycleRecordUpdates(cycleRecord, {
-    implementationPlan: result.plan,
-    implementationTasks: result.tasks,
-    implementationBatches: result.batches,
-    implementations: result.implementations,
-    implementation: result.text,
+    implementationPlan: implementation.plan,
+    implementationTasks: implementation.tasks,
+    implementationBatches: implementation.batches,
+    implementations: implementation.implementations,
+    implementation: implementation.text,
   });
 }
 
@@ -381,27 +360,26 @@ function recordTestResult(state, cycleRecord, testResult, { testFailureUpdates }
     test,
     testIssueCount: 1,
     issueCount: Math.max(normalizeFiniteNonNegativeNumber(cycleRecord.issueCount), 1),
-    ...(isObjectRecord(testFailureUpdates) ? testFailureUpdates : {}),
+    ...testFailureUpdates,
   });
   return test;
 }
 
 function applyImplementationResult(state, cycleRecord, implementationResult = {}, { testFailureUpdates } = /** @type {{ testFailureUpdates?: Object }} */ ({})) {
-  const result = normalizeImplementationResult(implementationResult);
-  recordImplementation(cycleRecord, result.implementation);
-  if (result.testResult) {
-    recordTestResult(state, cycleRecord, result.testResult, { testFailureUpdates });
+  recordImplementation(cycleRecord, implementationResult.implementation);
+  if (implementationResult.testResult) {
+    recordTestResult(state, cycleRecord, implementationResult.testResult, { testFailureUpdates });
   }
-  if (result.nextContext) {
-    setContext(state, result.nextContext);
+  if (implementationResult.nextContext) {
+    setContext(state, implementationResult.nextContext);
   }
-  if (Object.hasOwn(result, 'nextFindings')) {
-    setPriorFindings(state, result.nextFindings);
+  if (Object.hasOwn(implementationResult, 'nextFindings')) {
+    setPriorFindings(state, implementationResult.nextFindings);
   }
   return cycleRecord;
 }
 
 function applyCycleRecordUpdates(cycleRecord, updates) {
-  Object.assign(cycleRecord, isObjectRecord(updates) ? updates : {});
+  Object.assign(cycleRecord, updates);
   return cycleRecord;
 }

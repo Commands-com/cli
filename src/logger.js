@@ -36,6 +36,9 @@ export function createLogger({
     info(value = '') {
       if (!jsonMode) writeStdout(`${prefix}${value}`);
     },
+    warn(value = '') {
+      stderr(String(value));
+    },
     json(value) {
       writeStdout(JSON.stringify(value, null, 2));
     },

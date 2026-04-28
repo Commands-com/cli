@@ -4,7 +4,7 @@ import {
   projectCycleCommandOptions,
   resolveCycleCommandOptions,
   resolveRoomCommandOptions,
-} from '../src/command-option-resolver.js';
+} from '../src/command-options.js';
 import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
 
 function flags(entries = []) {

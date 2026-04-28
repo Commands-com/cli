@@ -20,7 +20,6 @@
     "src/assessment-report.js",
     "src/cli.js",
     "src/codex-jsonl.js",
-    "src/command-option-resolver.js",
     "src/command-option-schema.js",
     "src/command-options.js",
     "src/command-registry.js",

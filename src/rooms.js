@@ -1,6 +1,6 @@
 import { markdownArtifactPath } from './artifact-paths.js';
 import { commandResult, completeCommandRun } from './command-result.js';
-import { resolveRoomCommandOptions } from './command-option-resolver.js';
+import { resolveRoomCommandOptions } from './command-options.js';
 import { resolveRuntimeOptions } from './config.js';
 import {
   createRoomSynthesisArtifacts,

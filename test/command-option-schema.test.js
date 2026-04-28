@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveCycleCommandOptions } from '../src/command-option-resolver.js';
+import { resolveCycleCommandOptions } from '../src/command-options.js';
 import {
   ALL_FLAG_NAMES,
   COMMAND_OPTIONS,

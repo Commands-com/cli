@@ -1,12 +1,35 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 import { PROVIDER_PING_MARKER, runMockProvider } from '../src/mock-provider.js';
 import { appendCapped, extractProviderText, providerFailureDetails } from '../src/provider-output.js';
+import { PROCESS_KILL_GRACE_MS } from '../src/provider-limits.js';
 import { isTransientProviderError, runProviderWithRetry as runProviderWithRetryPolicy } from '../src/provider-retry.js';
 import { runProvider, runProviderWithRetry } from '../src/providers.js';
+
+function createMockChild({ kill } = {}) {
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.stdin = new PassThrough();
+  child.kill = kill || (() => true);
+  return child;
+}
+
+function mockSpawnReturning(t, child) {
+  const mockedSpawn = t.mock.method(childProcess, 'spawn', () => child);
+  syncBuiltinESMExports();
+  t.after(() => {
+    mockedSpawn.mock.restore();
+    syncBuiltinESMExports();
+  });
+}
 
 function mockText(options) {
   return runMockProvider(options).text;
@@ -333,6 +356,68 @@ test('runProvider reports provider timeouts explicitly', { skip: process.platfor
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
   }
+});
+
+test('runProvider threads waitForCloseOnTimeout: true to runProcess when allowTools is truthy', { skip: process.platform === 'win32' }, async (t) => {
+  // Verifies the call-site contract that write-capable runs (allowTools)
+  // defer the timeout settle until the spawned child has actually closed,
+  // so a retry/fallback never overlaps a still-running prior child.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+
+  const signals = [];
+  const child = createMockChild({
+    kill(signal) {
+      signals.push(signal);
+      return true;
+    },
+  });
+  mockSpawnReturning(t, child);
+
+  const promise = runProvider(
+    { id: 'codex', command: '/bin/codex' },
+    { cwd: '/', prompt: 'hello', model: '', allowTools: true, timeoutMs: 10 },
+  );
+  let settled = false;
+  promise.then(() => { settled = true; }, () => { settled = true; });
+
+  t.mock.timers.tick(10);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM']);
+  assert.equal(settled, false, 'allowTools=true must hold the settle until child close');
+
+  t.mock.timers.tick(PROCESS_KILL_GRACE_MS);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.equal(settled, false);
+
+  child.emit('close', null, 'SIGKILL');
+  await assert.rejects(promise, /codex timed out after 10ms \(ETIMEDOUT\)/);
+});
+
+test('runProvider threads waitForCloseOnTimeout: false to runProcess when allowTools is omitted', { skip: process.platform === 'win32' }, async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.after(() => t.mock.timers.reset());
+
+  const signals = [];
+  const child = createMockChild({
+    kill(signal) {
+      signals.push(signal);
+      return true;
+    },
+  });
+  mockSpawnReturning(t, child);
+
+  const promise = runProvider(
+    { id: 'codex', command: '/bin/codex' },
+    { cwd: '/', prompt: 'hello', model: '', timeoutMs: 10 },
+  );
+
+  t.mock.timers.tick(10);
+  // allowTools omitted → waitForCloseOnTimeout: false → settle on the
+  // timeout tick, before any child 'close' event arrives.
+  await assert.rejects(promise, /codex timed out after 10ms \(ETIMEDOUT\)/);
+  assert.deepEqual(signals, ['SIGTERM']);
 });
 
 test('runProvider tags timeout errors so isTransientProviderError treats them as retryable', { skip: process.platform === 'win32' }, async () => {

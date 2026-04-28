@@ -31,6 +31,8 @@ export async function runProviderWithRetry(provider, options = {}) {
 /**
  * @param {{id: string, command?: string}} provider
  * @param {RunProviderOptions} [options]
+ *
+ * Write-capable invocations (`options.allowTools`) pass `waitForCloseOnTimeout: true` to `runProcess`, so the worst-case latency on a timed-out call is `timeoutMs + PROCESS_KILL_GRACE_MS + PROCESS_FORCE_SETTLE_GRACE_MS` (SIGTERM, then the SIGKILL grace from `./provider-limits.js`, then the outer fail-safe from `./process-runner.js`).
  */
 export async function runProvider(provider, options = {}) {
   const adapter = getProviderAdapter(provider.id);
@@ -50,6 +52,10 @@ export async function runProvider(provider, options = {}) {
     timeoutMs,
     maxOutputBytes,
     resolveOnTimeout: true,
+    // Write-capable invocations may be editing the working tree; defer the
+    // timeout settle until the child has actually exited so a retry/fallback
+    // never overlaps with a still-running prior child.
+    waitForCloseOnTimeout: Boolean(options.allowTools),
   });
 
   if (result.error) {
