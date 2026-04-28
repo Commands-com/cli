@@ -15,7 +15,7 @@ import {
 import {
   formatIssueCount,
   parseQualitySummary,
-  summarizeQualityCycle,
+  summarizeScoredOutputs,
   worstScore,
 } from './cycle-summary.js';
 import { hasFlag, listOption, stringOption } from './command-options.js';
@@ -164,7 +164,12 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
       };
     },
     summarizeOutputs({ outputs }) {
-      return summarizeQualityCycle(outputs);
+      const combinedAreaAudits = outputs.some((output) => Array.isArray(output.areas) && output.areas.length > 1);
+      return summarizeScoredOutputs(outputs, {
+        noun: 'quality issue',
+        itemName: combinedAreaAudits ? 'provider audit' : 'area',
+        label: (output) => (combinedAreaAudits ? `${output.provider}: ${output.area}` : output.area),
+      });
     },
     summarizeSynthesis({ synthesisText }) {
       return parseQualitySummary(synthesisText);

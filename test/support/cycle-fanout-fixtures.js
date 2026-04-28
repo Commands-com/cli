@@ -41,12 +41,12 @@ export function fanoutDependencies({
     context: { repoRoot: '/repo' },
     store,
     logger,
-    fanoutRuntimeOptions: {
+    options: {
       providers,
       model: '',
       timeoutMs: 30_000,
       providerRetries: 0,
-      ...(fanoutParallel === undefined ? {} : { fanoutParallel }),
     },
+    ...(fanoutParallel === undefined ? {} : { fanoutParallel }),
   });
 }

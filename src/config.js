@@ -28,10 +28,10 @@ function configPath(cwd) {
 
 export async function loadConfig(cwd) {
   const filePath = configPath(cwd);
+  let parsed;
   try {
     const raw = await fs.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    parsed = JSON.parse(raw);
   } catch (error) {
     if (error?.code === 'ENOENT') return {};
     if (error instanceof SyntaxError) {
@@ -39,6 +39,11 @@ export async function loadConfig(cwd) {
     }
     throw error;
   }
+  if (!parsed || typeof parsed !== 'object') return {};
+  if (parsed.providers !== undefined && typeof parsed.providers !== 'string' && !Array.isArray(parsed.providers)) {
+    throw new UsageError(`invalid config JSON at ${filePath}: providers must be a string or array`);
+  }
+  return parsed;
 }
 
 async function saveConfig(cwd, config) {

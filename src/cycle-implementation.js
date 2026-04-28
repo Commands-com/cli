@@ -8,7 +8,6 @@ import {
   runOrchestratedImplementationPhase,
 } from './implementation.js';
 import { combineErrors } from './errors.js';
-import { isObjectRecord } from './objects.js';
 import { formatRepoContext } from './repo-context-prompt.js';
 import {
   runShell,
@@ -35,21 +34,10 @@ export { IMPLEMENTATION_PHASE_STATUS };
  */
 
 /**
- * Runtime option subset used by implementation.
- *
- * @typedef {Object} CycleImplementationRuntime
- * @property {Array<CycleProvider>} [providers] Provider fallback chain.
- * @property {CycleProvider} primaryProvider Provider used for planning and implementation.
- * @property {string} testCommand Optional validation command.
- * @property {string} [model] Provider model override.
- * @property {number} [timeoutMs] Provider and validation timeout.
- * @property {number} maxImplementers Maximum number of implementation tasks.
- * @property {boolean} [implementationParallel] Whether implementation batches may run in parallel.
- * @property {number} [providerRetries] Transient provider retry count.
- */
-
-/**
- * Explicit dependency object consumed by implementation and validation.
+ * Explicit dependency object consumed by implementation and validation. Built
+ * by `createCyclePhaseView`; the planning/timeout/retry fields are read off
+ * `options` directly while `testCommand`, `maxImplementers`, and
+ * `implementationParallel` are precomputed defaults.
  *
  * @typedef {Object} CycleImplementationDependencies
  * @property {string} kind Workflow kind for implementer log prefixes.
@@ -57,7 +45,10 @@ export { IMPLEMENTATION_PHASE_STATUS };
  * @property {CycleWorkspace} workspace Active workspace.
  * @property {CycleRepoContext} context Repository context captured before implementation.
  * @property {CycleLogger} logger Command logger.
- * @property {CycleImplementationRuntime} implementationRuntimeOptions Implementation runtime options.
+ * @property {import('./cycle-state.js').CycleRuntimeOptions} options Runtime options owned by the cycle state.
+ * @property {string} testCommand Optional validation command (defaults to '').
+ * @property {number} maxImplementers Maximum number of implementation tasks.
+ * @property {boolean} implementationParallel Whether implementation batches may run in parallel.
  */
 
 /**
@@ -76,25 +67,24 @@ export async function runImplementationAndValidationPhase(dependencies, {
   objective,
   findings,
 }) {
-  assertCycleImplementationDependencies(dependencies);
   const {
     kind,
     store,
     workspace,
     context,
     logger,
-    implementationRuntimeOptions: runtimeOptions,
+    options,
+    testCommand,
+    maxImplementers,
+    implementationParallel,
   } = dependencies;
   const {
     primaryProvider,
     providers,
-    testCommand,
     model,
     timeoutMs,
-    maxImplementers,
-    implementationParallel,
     providerRetries,
-  } = runtimeOptions;
+  } = options;
   logger.info(`cycle ${cycle}: orchestrator (${primaryProvider.id})`);
   const implementationPhase = await runOrchestratedImplementationPhase({
     provider: primaryProvider,
@@ -219,19 +209,4 @@ function testLogText({ testCommand, testResult }) {
     testResult.stdout,
     testResult.stderr,
   ].join('\n');
-}
-
-function assertCycleImplementationDependencies(dependencies) {
-  const runtimeOptions = dependencies?.implementationRuntimeOptions;
-  const missing = [
-    [isObjectRecord(dependencies), 'explicit implementation dependencies'],
-    [typeof dependencies?.kind === 'string' && Boolean(dependencies.kind), 'kind'],
-    [typeof dependencies?.store?.write === 'function', 'dependencies.store.write'],
-    [typeof dependencies?.workspace?.cwd === 'string', 'dependencies.workspace.cwd'],
-    [typeof dependencies?.context?.repoRoot === 'string', 'dependencies.context.repoRoot'],
-    [typeof dependencies?.logger?.info === 'function', 'dependencies.logger.info'],
-    [isObjectRecord(runtimeOptions), 'dependencies.implementationRuntimeOptions'],
-    [typeof runtimeOptions?.primaryProvider?.id === 'string', 'dependencies.implementationRuntimeOptions.primaryProvider'],
-  ].find(([passes]) => !passes);
-  if (missing) throw new Error(`runImplementationAndValidationPhase requires ${missing[1]}`);
 }

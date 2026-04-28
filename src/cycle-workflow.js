@@ -37,6 +37,7 @@ import {
 } from './workflow-constants.js';
 
 const RESUME_ALWAYS_NEXT_FIELDS = new Set(['json', 'resume']);
+const RESUME_PROVIDER_FIELDS = Object.freeze(['providers', 'providerIds', 'primaryProvider']);
 
 export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
   COMMAND_OPTIONS.flatMap((option) => {
@@ -303,23 +304,21 @@ function resumeWorkspace(workspace, context) {
 
 export function mergeResumeOptions(storedOptions, nextOptions, flags) {
   const stored = storedOptions && typeof storedOptions === 'object' ? storedOptions : {};
-  const merged = {
-    ...nextOptions,
-    ...stored,
-  };
-  if (!Array.isArray(stored.providers) || stored.providers.length === 0) {
-    merged.providers = nextOptions.providers;
-    merged.providerIds = nextOptions.providerIds;
-    merged.primaryProvider = nextOptions.primaryProvider;
+  const decisions = new Map();
+  for (const field of new Set([...Object.keys(stored), ...Object.keys(nextOptions)])) {
+    decisions.set(field, Object.hasOwn(stored, field) ? 'stored' : 'next');
   }
-
   for (const override of CYCLE_RESUME_OPTION_OVERRIDES) {
     if (!hasAnyFlag(flags, override.flags)) continue;
-    for (const field of override.fields) merged[field] = nextOptions[field];
+    for (const field of override.fields) decisions.set(field, 'next');
   }
-
-  for (const field of RESUME_ALWAYS_NEXT_FIELDS) {
-    merged[field] = nextOptions[field];
+  for (const field of RESUME_ALWAYS_NEXT_FIELDS) decisions.set(field, 'next');
+  if (!Array.isArray(stored.providers) || stored.providers.length === 0) {
+    for (const field of RESUME_PROVIDER_FIELDS) decisions.set(field, 'next');
+  }
+  const merged = {};
+  for (const [field, source] of decisions) {
+    merged[field] = source === 'next' ? nextOptions[field] : stored[field];
   }
   return merged;
 }

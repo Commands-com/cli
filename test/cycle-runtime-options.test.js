@@ -16,22 +16,19 @@ function phaseState(options) {
   });
 }
 
-test('createCyclePhaseView defaults phase-specific runtime options', () => {
+test('createCyclePhaseView defaults testCommand and maxImplementers when undefined', () => {
   const provider = { id: 'mock' };
-  const state = phaseState({
+  const view = createCyclePhaseView(phaseState({
     providers: [provider],
     primaryProvider: provider,
     model: 'gpt-test',
     timeoutMs: 1234,
     providerRetries: 2,
     testCommand: undefined,
-  });
+  }));
 
-  const view = createCyclePhaseView(state);
-
-  assert.equal(view.implementationRuntimeOptions.testCommand, '');
-  assert.equal(view.implementationRuntimeOptions.maxImplementers, 1);
-  assert.equal(view.fanoutRuntimeOptions.fanoutParallel, false);
-  assert.equal(view.implementationRuntimeOptions.implementationParallel, false);
-  assert.equal(Object.hasOwn(view, 'runtimeOptions'), false);
+  assert.equal(view.testCommand, '');
+  assert.equal(view.maxImplementers, 1);
+  assert.equal(view.fanoutParallel, false);
+  assert.equal(view.implementationParallel, false);
 });

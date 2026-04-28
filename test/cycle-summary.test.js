@@ -6,10 +6,25 @@ import {
   parseQualitySummary,
   parseReviewSummary,
   scoreIsWorseThanTarget,
-  summarizeQualityCycle,
-  summarizeReviewCycle,
+  summarizeScoredOutputs,
   worstScore,
 } from '../src/cycle-summary.js';
+
+function summarizeQualityAreas(outputs) {
+  return summarizeScoredOutputs(outputs, {
+    noun: 'quality issue',
+    itemName: 'area',
+    label: (output) => output.area,
+  });
+}
+
+function summarizeReviewRoles(outputs) {
+  return summarizeScoredOutputs(outputs, {
+    noun: 'review issue',
+    itemName: 'role',
+    label: (output) => output.role,
+  });
+}
 import {
   SCORE_ORDER,
   gradeFromIssueCount,
@@ -464,7 +479,7 @@ test('issue count formatting and quality cycle summaries are shared', () => {
   assert.equal(formatIssueCount(1), '1 issue');
   assert.equal(formatIssueCount(2), '2 issues');
 
-  assert.deepEqual(summarizeQualityCycle([
+  assert.deepEqual(summarizeQualityAreas([
     { area: 'tests', score: 'B', issueCount: 1, synopsis: 'Missing edge case coverage.' },
     { area: 'maintainability', score: 'C', issueCount: 2, synopsis: 'Duplicate parsing helper logic.' },
   ]), {
@@ -473,7 +488,7 @@ test('issue count formatting and quality cycle summaries are shared', () => {
     synopsis: '3 issues across 2 areas. tests: B, 1 issue - Missing edge case coverage.; maintainability: C, 2 issues - Duplicate parsing helper logic.',
   });
 
-  assert.deepEqual(summarizeQualityCycle([
+  assert.deepEqual(summarizeQualityAreas([
     { area: 'tests', score: 'A', issueCount: 0, synopsis: 'Clean.' },
   ]), {
     score: 'A',
@@ -481,7 +496,7 @@ test('issue count formatting and quality cycle summaries are shared', () => {
     synopsis: 'No unresolved quality issues across 1 area.',
   });
 
-  const invalidScores = summarizeQualityCycle([
+  const invalidScores = summarizeQualityAreas([
     { area: 'tests', score: '', issueCount: 1, synopsis: 'Missing edge case coverage.' },
     { area: 'maintainability', score: 'not-a-score', issueCount: 2, synopsis: 'Fallback should use counts.' },
   ]);
@@ -489,13 +504,13 @@ test('issue count formatting and quality cycle summaries are shared', () => {
   assert.equal(invalidScores.issueCount, 3);
 
   const longSynopsis = `one   two\n${'x'.repeat(120)}`;
-  assert.equal(summarizeQualityCycle([
+  assert.equal(summarizeQualityAreas([
     { area: 'tests', score: 'B', issueCount: 1, synopsis: longSynopsis },
   ]).synopsis, `1 issue across 1 area. tests: B, 1 issue - one two ${'x'.repeat(99)}...`);
 });
 
 test('review cycle summaries mirror quality scoring by reviewer role', () => {
-  assert.deepEqual(summarizeReviewCycle([
+  assert.deepEqual(summarizeReviewRoles([
     { role: 'correctness', score: 'B', issueCount: 1, synopsis: 'Parser edge-case risk.' },
     { role: 'maintainability', score: 'A', issueCount: 0, synopsis: 'Clean.' },
   ]), {
@@ -504,7 +519,7 @@ test('review cycle summaries mirror quality scoring by reviewer role', () => {
     synopsis: '1 issue across 2 roles. correctness: B, 1 issue - Parser edge-case risk.; maintainability: A, 0 issues - Clean.',
   });
 
-  assert.deepEqual(summarizeReviewCycle([
+  assert.deepEqual(summarizeReviewRoles([
     { role: 'tests', score: 'A', issueCount: 0, synopsis: 'Clean.' },
   ]), {
     score: 'A',

@@ -188,8 +188,10 @@ test('cycle phase view reads from state.options without widening state', () => {
 
   const view = createCyclePhaseView(state);
 
-  assert.equal(view.fanoutRuntimeOptions.providers, state.options.providers);
+  assert.equal(view.options, state.options);
+  assert.equal(view.options.providers, state.options.providers);
   assert.equal(Object.hasOwn(view, 'runtimeOptions'), false);
+  assert.equal(Object.hasOwn(view, 'fanoutRuntimeOptions'), false);
 });
 
 test('beginCycle creates and stores a cycle record with optional prior findings', () => {

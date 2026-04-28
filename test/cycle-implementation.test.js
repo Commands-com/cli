@@ -65,8 +65,8 @@ test('runImplementationAndValidationPhase records implementation results and fai
     const testCommand = 'node -e "process.stdout.write(\'validation failed\'); process.exit(7)"';
     const state = testState(cwd, { testCommand });
     const phaseView = createCyclePhaseView(state);
-    assert.equal(phaseView.implementationRuntimeOptions.implementationParallel, true);
-    assert.equal(Object.hasOwn(phaseView.implementationRuntimeOptions, 'parallel'), false);
+    assert.equal(phaseView.implementationParallel, true);
+    assert.equal(Object.hasOwn(phaseView, 'implementationRuntimeOptions'), false);
     const recorder = createCycleRecorder(state);
     const cycleRecord = recorder.beginCycle(1, { issueCount: 0, score: 'B' });
 
@@ -188,53 +188,6 @@ test('runImplementationAndValidationPhase preserves partial result when validati
     assert.equal(phase.result.nextContext.repoRoot, await fs.realpath(tmp));
   } finally {
     await fs.rm(tmp, { recursive: true, force: true });
-  }
-});
-
-test('runImplementationAndValidationPhase rejects incomplete dependencies', async () => {
-  const cwd = await tempDir();
-  try {
-    const state = testState(cwd);
-    const args = {
-      cycle: 1,
-      objective: 'Improve maintainability',
-      findings: 'Existing synthesized findings.',
-    };
-
-    await assert.rejects(
-      runImplementationAndValidationPhase({
-        ...createCyclePhaseView(state),
-        workspace: undefined,
-      }, args),
-      /requires dependencies\.workspace\.cwd/,
-    );
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runImplementationAndValidationPhase rejects legacy runtimeOptions-only dependencies', async () => {
-  const cwd = await tempDir();
-  try {
-    const state = testState(cwd);
-    const {
-      implementationRuntimeOptions,
-      ...legacyDependencies
-    } = createCyclePhaseView(state);
-
-    await assert.rejects(
-      runImplementationAndValidationPhase({
-        ...legacyDependencies,
-        runtimeOptions: implementationRuntimeOptions,
-      }, {
-        cycle: 1,
-        objective: 'Improve maintainability',
-        findings: 'Existing synthesized findings.',
-      }),
-      /runImplementationAndValidationPhase requires dependencies\.implementationRuntimeOptions/,
-    );
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
   }
 });
 

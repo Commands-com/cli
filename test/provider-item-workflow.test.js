@@ -14,34 +14,6 @@ import {
   writeExecutable,
 } from './support/provider-item-fixtures.js';
 
-test('runProviderItem validates required artifact writers', async () => {
-  const provider = { id: 'mock', command: '' };
-  const baseArgs = {
-    provider,
-    label: 'maintainability',
-    prompt: 'prompt',
-    cwd: process.cwd(),
-    retry: {
-      retries: 0,
-    },
-  };
-
-  await assert.rejects(
-    runProviderItem({
-      ...baseArgs,
-      artifacts: /** @type {any} */ ({ writeOutput() {} }),
-    }),
-    /runProviderItem requires artifacts\.writePrompt/,
-  );
-  await assert.rejects(
-    runProviderItem({
-      ...baseArgs,
-      artifacts: /** @type {any} */ ({ writePrompt() {} }),
-    }),
-    /runProviderItem requires artifacts\.writeOutput/,
-  );
-});
-
 test('runProviderItem writes the prompt before provider execution and output after success', { skip: process.platform === 'win32' }, async () => {
   const dir = await tempDir();
   try {

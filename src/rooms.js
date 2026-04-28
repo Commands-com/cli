@@ -230,9 +230,9 @@ async function runRoomParticipantFanout({ logger, roomRun, run }) {
     context: run.context,
     store: run.store,
     logger,
-    fanoutRuntimeOptions: {
+    fanoutParallel: parallel,
+    options: {
       providers: [provider],
-      fanoutParallel: parallel,
       model,
       timeoutMs,
       providerRetries,

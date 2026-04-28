@@ -93,7 +93,6 @@ test('runProviderSynthesisWithFallback writes prompt and synthesis artifacts on 
     await fs.rm(cwd, { recursive: true, force: true });
   }
 });
-
 test('runSynthesisWithFallback writes cycle error artifact and returns fallback state on failure', async () => {
   const cwd = await tempDir('commands-com-cycle-synthesis-test-');
   try {
@@ -105,7 +104,7 @@ test('runSynthesisWithFallback writes cycle error artifact and returns fallback 
       context: { repoRoot: cwd },
       store: localStore(storeDir),
       logger,
-      synthesisRuntimeOptions: {
+      options: {
         primaryProvider: { id: 'unsupported-test-provider', command: '' },
         model: '',
         timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -193,7 +192,7 @@ test('runSynthesisWithFallback accepts explicit synthesis dependencies', async (
       context: { repoRoot: cwd },
       store: localStore(storeDir),
       logger,
-      synthesisRuntimeOptions: {
+      options: {
         primaryProvider: { id: 'mock' },
         model: '',
         timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -240,7 +239,7 @@ test('runSynthesisWithFallback tries provider fallbacks for transient failures',
       context: { repoRoot: cwd },
       store: localStore(storeDir),
       logger,
-      synthesisRuntimeOptions: {
+      options: {
         providers: [{ id: 'claude', command: failingClaude }, { id: 'mock' }],
         primaryProvider: { id: 'claude', command: failingClaude },
         model: '',
@@ -266,62 +265,6 @@ test('runSynthesisWithFallback tries provider fallbacks for transient failures',
       /Selected model is at capacity/,
     );
     await assert.rejects(fs.stat(path.join(storeDir, 'cycle-5/synthesis-error.md')), /ENOENT/);
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runSynthesisWithFallback rejects dependencies without synthesisRuntimeOptions', async () => {
-  const cwd = await tempDir('commands-com-cycle-synthesis-test-');
-  try {
-    const synthesisRuntimeOptions = {
-      primaryProvider: { id: 'mock' },
-      model: '',
-      timeoutMs: DEFAULT_TIMEOUT_MS,
-      providerRetries: 0,
-    };
-
-    await assert.rejects(
-      runSynthesisWithFallback({
-        context: { repoRoot: cwd },
-        store: localStore(path.join(cwd, 'store')),
-        logger: memoryLogger(),
-        runtimeOptions: synthesisRuntimeOptions,
-      }, {
-        cycle: 4,
-        prompt: 'Synthesize provider outputs.',
-        fallbackDescription: 'provider outputs',
-      }),
-      /runSynthesisWithFallback requires dependencies\.synthesisRuntimeOptions/,
-    );
-  } finally {
-    await fs.rm(cwd, { recursive: true, force: true });
-  }
-});
-
-test('runProviderSynthesisWithFallback requires structured artifact writers', async () => {
-  const cwd = await tempDir('commands-com-cycle-synthesis-test-');
-  try {
-    await assert.rejects(
-      runProviderSynthesisWithFallback({
-        providerCall: {
-          provider: { id: 'mock', command: '' },
-          model: '',
-          timeoutMs: DEFAULT_TIMEOUT_MS,
-          providerRetries: 0,
-          cwd,
-        },
-        artifacts: /** @type {any} */ ({
-          store: localStore(path.join(cwd, 'store')),
-          promptPath: 'prompts/synthesis-mock.md',
-          outputPath: 'synthesis.md',
-          errorPath: 'synthesis-error.md',
-        }),
-        prompt: 'Synthesize provider outputs.',
-        fallbackDescription: 'provider outputs',
-      }),
-      /requires artifacts\.writePrompt/,
-    );
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }

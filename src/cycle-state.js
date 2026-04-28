@@ -166,7 +166,11 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  */
 
 /**
- * Normalized read-only dependency view shared by cycle phases.
+ * Normalized read-only dependency view shared by cycle phases. Phase modules
+ * read provider/model/timeout fields off `options` directly; the flat
+ * `fanoutParallel`/`implementationParallel` flags and `maxImplementers`/
+ * `testCommand` defaults are precomputed here so callers do not duplicate the
+ * normalization.
  *
  * @typedef {Object} CyclePhaseView
  * @property {string} kind Workflow kind.
@@ -174,10 +178,12 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {CycleWorkspace} workspace Active workspace.
  * @property {CycleRepoContext} context Current repository context.
  * @property {CycleLogger} [logger] Command logger.
- * @property {Object} fanoutRuntimeOptions Normalized fan-out option subset.
+ * @property {CycleRuntimeOptions} options Runtime options owned by the cycle state.
  * @property {Record<string, string>} providerSessions Provider session ids keyed by phase/provider/item.
- * @property {Object} synthesisRuntimeOptions Normalized synthesis option subset.
- * @property {Object} implementationRuntimeOptions Normalized implementation option subset.
+ * @property {boolean} fanoutParallel Whether provider fan-out may run in parallel.
+ * @property {boolean} implementationParallel Whether implementation batches may run in parallel.
+ * @property {number} maxImplementers Maximum number of implementation tasks (defaults to 1).
+ * @property {string} testCommand Optional validation command (defaults to '').
  */
 
 /**
@@ -276,36 +282,18 @@ export function createCycleRunContext(state) {
 export function createCyclePhaseView(state) {
   const options = state?.options || {};
   const maxImplementers = options.maxImplementers === undefined ? 1 : options.maxImplementers;
-  const fanoutParallel = !options.serial && Boolean(options.parallel);
-  const implementationParallel = !options.serial && maxImplementers > 1;
-  const commonProviderCallOptions = {
-    providers: options.providers,
-    model: options.model,
-    timeoutMs: options.timeoutMs,
-    providerRetries: options.providerRetries,
-  };
   return Object.freeze({
     kind: state?.kind,
     store: state?.store,
     workspace: state?.workspace,
     context: state?.context,
     logger: state?.logger,
-    fanoutRuntimeOptions: Object.freeze({
-      ...commonProviderCallOptions,
-      fanoutParallel,
-    }),
+    options,
     providerSessions: state?.providerSessions || {},
-    synthesisRuntimeOptions: Object.freeze({
-      ...commonProviderCallOptions,
-      primaryProvider: options.primaryProvider,
-    }),
-    implementationRuntimeOptions: Object.freeze({
-      ...commonProviderCallOptions,
-      primaryProvider: options.primaryProvider,
-      implementationParallel,
-      testCommand: options.testCommand === undefined ? '' : options.testCommand,
-      maxImplementers,
-    }),
+    fanoutParallel: !options.serial && Boolean(options.parallel),
+    implementationParallel: !options.serial && maxImplementers > 1,
+    maxImplementers,
+    testCommand: options.testCommand === undefined ? '' : options.testCommand,
   });
 }
 

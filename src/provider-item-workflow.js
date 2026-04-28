@@ -64,8 +64,8 @@ import { runProviderWithRetry } from './providers.js';
  * Args bag consumed by `runProviderItem`. Parallel in spirit to
  * `RunProviderOptions` in `provider-invocation.js`: a single options bag.
  * Every field is marked optional at the type level so the `args = {}` default
- * type-checks; runtime validation in `assertProviderItemRun` is the source of
- * truth for which fields must actually be present (`provider`, `artifacts`).
+ * type-checks; `provider` and `artifacts.writePrompt`/`artifacts.writeOutput`
+ * must be present at runtime.
  *
  * @typedef {object} RunProviderItemArgs
  * @property {ProviderDescriptor} [provider]
@@ -134,7 +134,6 @@ export async function runProviderItem(args = {}) {
     session,
   } = normalizeProviderItemPolicies(args);
 
-  assertProviderItemRun({ provider, artifacts });
   await artifacts.writePrompt(prompt);
 
   let result;
@@ -188,18 +187,6 @@ export async function runProviderItem(args = {}) {
     result,
     text: result.text,
   };
-}
-
-function assertProviderItemRun({ provider, artifacts }) {
-  if (!provider || typeof provider !== 'object') {
-    throw new Error('runProviderItem requires provider');
-  }
-  if (!artifacts || typeof artifacts.writePrompt !== 'function') {
-    throw new Error('runProviderItem requires artifacts.writePrompt');
-  }
-  if (typeof artifacts.writeOutput !== 'function') {
-    throw new Error('runProviderItem requires artifacts.writeOutput');
-  }
 }
 
 function normalizeProviderItemPolicies(args) {

@@ -72,28 +72,6 @@ function buildAssessmentFanoutJobs({ providers, items }) {
   })));
 }
 
-function assertAssessmentFanoutContract({
-  dependencies,
-  items,
-  buildPrompt,
-  buildOutput,
-}) {
-  const runtimeOptions = dependencies?.fanoutRuntimeOptions;
-  const requirements = [
-    [isObjectRecord(dependencies), 'explicit fan-out dependencies'],
-    [isObjectRecord(runtimeOptions), 'fanoutRuntimeOptions'],
-    [isObjectRecord(dependencies?.context), 'context'],
-    [typeof dependencies?.context?.repoRoot === 'string', 'context.repoRoot'],
-    [typeof dependencies?.store?.write === 'function', 'store.write'],
-    [Array.isArray(runtimeOptions?.providers), 'providers'],
-    [Array.isArray(items), 'items'],
-    [typeof buildPrompt === 'function', 'buildPrompt'],
-    [typeof buildOutput === 'function', 'buildOutput'],
-  ];
-  const missing = requirements.find(([passes]) => !passes);
-  if (missing) throw new Error(`runAssessmentProviderFanout requires ${missing[1]}`);
-}
-
 function normalizeAssessmentFanoutOptions(options = {}) {
   const adapter = isObjectRecord(options.adapter) ? options.adapter : {};
   const internal = isObjectRecord(options.internal) ? options.internal : {};
@@ -141,26 +119,20 @@ export async function runAssessmentProviderFanout(dependencies, options = {}) {
     writeAdditionalArtifacts,
     writeFailureArtifact,
   } = normalizeAssessmentFanoutOptions(options);
-  assertAssessmentFanoutContract({
-    dependencies,
-    items,
-    buildPrompt,
-    buildOutput,
-  });
   const {
     context,
     store,
     logger = {},
     providerSessions,
-    fanoutRuntimeOptions: runtimeOptions,
+    options: phaseOptions,
+    fanoutParallel,
   } = dependencies;
   const {
     providers,
-    fanoutParallel,
     model,
     timeoutMs,
     providerRetries,
-  } = runtimeOptions;
+  } = phaseOptions;
   const jobs = buildAssessmentFanoutJobs({ providers, items });
   const run = createFanoutJobRunner({
     cycle,

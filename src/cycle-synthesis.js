@@ -9,7 +9,6 @@ import {
   runProviderItem,
 } from './provider-item-workflow.js';
 import { formatFailureMessage } from './errors.js';
-import { isObjectRecord } from './objects.js';
 import { isTransientProviderError } from './providers.js';
 import { providerFallbackChain } from './provider-fallback.js';
 
@@ -21,24 +20,15 @@ import { providerFallbackChain } from './provider-fallback.js';
  */
 
 /**
- * Runtime option subset used by synthesis.
- *
- * @typedef {Object} CycleSynthesisRuntimeOptions
- * @property {Array<CycleProvider>} [providers] Provider fallback chain.
- * @property {CycleProvider} primaryProvider Provider used for synthesis.
- * @property {string} [model] Provider model override.
- * @property {number} [timeoutMs] Provider timeout.
- * @property {number} [providerRetries] Transient provider retry count.
- */
-
-/**
- * Explicit dependency object consumed by synthesis.
+ * Explicit dependency object consumed by synthesis. Built by
+ * `createCyclePhaseView`; phase modules read provider/model/timeout fields off
+ * `options` directly.
  *
  * @typedef {Object} CycleSynthesisDependencies
  * @property {CycleRepoContext} context Repository context for provider cwd.
  * @property {CycleStore} store Artifact store.
  * @property {CycleLogger} [logger] Command logger.
- * @property {CycleSynthesisRuntimeOptions} synthesisRuntimeOptions Synthesis runtime options.
+ * @property {import('./cycle-state.js').CycleRuntimeOptions} options Runtime options owned by the cycle state.
  */
 
 function createSynthesisArtifacts({
@@ -137,7 +127,6 @@ export async function runProviderSynthesisWithFallback({
   } = logging;
 
   logger?.info(`${prefix}synthesis (${provider.id})`);
-  assertSynthesisArtifacts(artifacts);
 
   try {
     const synthesisResult = await runProviderItem({
@@ -186,12 +175,11 @@ export async function runSynthesisWithFallback(dependencies, {
   prompt,
   fallbackDescription,
 }) {
-  assertCycleSynthesisDependencies(dependencies);
   const {
     context,
     store,
     logger,
-    synthesisRuntimeOptions: runtimeOptions,
+    options,
   } = dependencies;
   const {
     primaryProvider,
@@ -199,7 +187,7 @@ export async function runSynthesisWithFallback(dependencies, {
     model,
     timeoutMs,
     providerRetries,
-  } = runtimeOptions;
+  } = options;
   const providerChain = providerFallbackChain(primaryProvider, providers);
   let lastResult;
   for (let index = 0; index < providerChain.length; index += 1) {
@@ -254,27 +242,4 @@ export function formatPriorFindings({
     `## ${findingsTitle}`,
     findingsText || '(none)',
   ].join('\n');
-}
-
-function assertSynthesisArtifacts(artifacts) {
-  const missing = [
-    [typeof artifacts?.writePrompt === 'function', 'artifacts.writePrompt'],
-    [typeof artifacts?.writeOutput === 'function', 'artifacts.writeOutput'],
-    [typeof artifacts?.writeError === 'function', 'artifacts.writeError'],
-  ].find(([passes]) => !passes);
-  if (missing) throw new Error(`runProviderSynthesisWithFallback requires ${missing[1]}`);
-}
-
-function assertCycleSynthesisDependencies(dependencies) {
-  const missing = [
-    [isObjectRecord(dependencies), 'explicit synthesis dependencies'],
-    [typeof dependencies?.context?.repoRoot === 'string', 'dependencies.context.repoRoot'],
-    [typeof dependencies?.store?.write === 'function', 'dependencies.store.write'],
-    [isObjectRecord(dependencies?.synthesisRuntimeOptions), 'dependencies.synthesisRuntimeOptions'],
-    [
-      typeof dependencies?.synthesisRuntimeOptions?.primaryProvider?.id === 'string',
-      'dependencies.synthesisRuntimeOptions.primaryProvider',
-    ],
-  ].find(([passes]) => !passes);
-  if (missing) throw new Error(`runSynthesisWithFallback requires ${missing[1]}`);
 }

@@ -14,7 +14,7 @@ import { readRunMetadata } from './run-store.js';
 import {
   formatIssueCount,
   parseReviewSummary,
-  summarizeReviewCycle,
+  summarizeScoredOutputs,
 } from './cycle-summary.js';
 import { createCommandLogger } from './logger.js';
 import {
@@ -149,7 +149,11 @@ function createReviewAssessmentAdapter({ objective, reviewers }) {
       };
     },
     summarizeOutputs({ outputs }) {
-      const summary = summarizeReviewCycle(outputs.map(withReviewSummary));
+      const summary = summarizeScoredOutputs(outputs.map(withReviewSummary), {
+        noun: 'review issue',
+        itemName: 'role',
+        label: (output) => output.role,
+      });
       return {
         ...summary,
         reviewerIssueCount: summary.issueCount,

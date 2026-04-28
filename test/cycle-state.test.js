@@ -293,7 +293,7 @@ test('createCycleRecorder preserves positive issue counts when tests fail', () =
   assert.equal(cycleRecord.testIssueCount, 1);
 });
 
-test('createCyclePhaseView exposes shared phase dependencies without custom options', () => {
+test('createCyclePhaseView passes options through and precomputes flat phase defaults', () => {
   const provider = { id: 'mock' };
   const state = createCycleState(baseStateArgs({
     providers: [provider],
@@ -313,43 +313,22 @@ test('createCyclePhaseView exposes shared phase dependencies without custom opti
   const view = createCyclePhaseView(state);
 
   assert.equal(Object.isFrozen(view), true);
-  assert.equal(Object.isFrozen(view.fanoutRuntimeOptions), true);
-  assert.equal(Object.isFrozen(view.synthesisRuntimeOptions), true);
-  assert.equal(Object.isFrozen(view.implementationRuntimeOptions), true);
   assert.equal(view.kind, 'review');
   assert.equal(view.context, state.context);
   assert.equal(view.store, state.store);
   assert.equal(view.logger, state.logger);
   assert.equal(view.workspace, state.workspace);
-  assert.deepEqual(view.fanoutRuntimeOptions, {
-    providers: [provider],
-    fanoutParallel: false,
-    model: 'gpt-test',
-    timeoutMs: 1234,
-    providerRetries: 2,
-  });
-  assert.deepEqual(view.synthesisRuntimeOptions, {
-    providers: [provider],
-    primaryProvider: provider,
-    model: 'gpt-test',
-    timeoutMs: 1234,
-    providerRetries: 2,
-  });
-  assert.deepEqual(view.implementationRuntimeOptions, {
-    providers: [provider],
-    primaryProvider: provider,
-    implementationParallel: true,
-    model: 'gpt-test',
-    timeoutMs: 1234,
-    providerRetries: 2,
-    testCommand: 'npm test',
-    maxImplementers: 3,
-  });
-  assert.equal(Object.hasOwn(view, 'options'), false);
-  assert.equal(Object.hasOwn(view, 'runtimeOptions'), false);
+  assert.equal(view.options, state.options);
+  assert.equal(view.fanoutParallel, false);
+  assert.equal(view.implementationParallel, true);
+  assert.equal(view.maxImplementers, 3);
+  assert.equal(view.testCommand, 'npm test');
+  assert.equal(Object.hasOwn(view, 'fanoutRuntimeOptions'), false);
+  assert.equal(Object.hasOwn(view, 'synthesisRuntimeOptions'), false);
+  assert.equal(Object.hasOwn(view, 'implementationRuntimeOptions'), false);
 });
 
-test('createCyclePhaseView projects phase parallel flags from runtime options', () => {
+test('createCyclePhaseView derives parallel flags from runtime options', () => {
   const cases = [
     {
       name: 'serial disables both phase parallel flags',
@@ -377,8 +356,8 @@ test('createCyclePhaseView projects phase parallel flags from runtime options', 
     const view = createCyclePhaseView(createCycleState(baseStateArgs(options)));
 
     assert.deepEqual({
-      fanoutParallel: view.fanoutRuntimeOptions.fanoutParallel,
-      implementationParallel: view.implementationRuntimeOptions.implementationParallel,
+      fanoutParallel: view.fanoutParallel,
+      implementationParallel: view.implementationParallel,
     }, expected, name);
   }
 });
