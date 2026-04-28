@@ -152,6 +152,28 @@ test('final summary falls back to zero for missing issue counts', async () => {
   assert.equal(report.summary.final.issueCount, 0);
 });
 
+test('final summary allows A with minor issues only', async () => {
+  const cycle = {
+    score: 'A',
+    issueCount: 0,
+    minorIssueCount: 4,
+    synopsis: 'Only minor incremental polish remains.',
+  };
+  const state = assessmentState({ kind: 'quality', cycle });
+
+  const report = await writeAssessmentFinalReport(state, {
+    finalCycle: cycle,
+    finalState: finalStateFor(state, cycle, qualityHasFinalIssues),
+    reportPath: '/runs/code-quality.md',
+  });
+
+  assert.equal(report.summary.status, 'passed');
+  assert.equal(report.summary.final.score, 'A');
+  assert.equal(report.summary.final.issueCount, 0);
+  assert.equal(report.summary.final.minorIssueCount, 4);
+  assert.match(report.finalReport, /Final: A \(0 major, 4 minor\)/);
+});
+
 test('final summary marks missed until targets as issues', async () => {
   const cycle = {
     score: 'B',
@@ -211,18 +233,21 @@ test('final summary handles zero-cycle runs explicitly', async () => {
   assert.deepEqual(report.summary.initial, {
     score: '',
     issueCount: 0,
+    minorIssueCount: 0,
   });
   assert.deepEqual(report.summary.final, {
     score: '',
     issueCount: 0,
+    minorIssueCount: 0,
     synopsis: '',
     fanoutFailureCount: 0,
     fanoutFailures: [],
   });
   assert.equal(report.summary.issueDelta, 0);
+  assert.equal(report.summary.minorIssueDelta, 0);
   assert.match(report.finalReport, /Cycles: 0/);
-  assert.match(report.finalReport, /Initial: \(0 issues\)/);
-  assert.match(report.finalReport, /Final: \(0 issues\)/);
+  assert.match(report.finalReport, /Initial: \(0 major, 0 minor\)/);
+  assert.match(report.finalReport, /Final: \(0 major, 0 minor\)/);
 });
 
 test('completeAssessmentCommandRun passes when until target score is met with remaining issues', async () => {

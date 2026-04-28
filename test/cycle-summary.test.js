@@ -39,12 +39,12 @@ const QUALITY_SCORE_REPRESENTATIVE_COUNTS = Object.freeze({
 });
 
 test('countReviewIssues honors only top review summary blocks for clean counts', () => {
-  assert.equal(countReviewIssues('```yaml\nverdict: clean\nissue_count: 0\n```'), 0);
-  assert.equal(countReviewIssues('```yaml\nverdict: issues\nissue_count: 4\n```'), 4);
+  assert.equal(countReviewIssues('```yaml\nverdict: clean\nmajor_issue_count: 0\n```'), 0);
+  assert.equal(countReviewIssues('```yaml\nverdict: issues\nmajor_issue_count: 4\n```'), 4);
   assert.equal(countReviewIssues('```yaml\nverdict: clean\n```\nNo issues.'), 1);
-  assert.equal(countReviewIssues('```yaml\nverdict: clean\nissue_count: many\n```'), 1);
-  assert.equal(countReviewIssues('issue_count: 0\n\n```yaml\nverdict: issues\nissue_count: 4\n```'), 1);
-  assert.equal(countReviewIssues('```yaml\nverdict: clean\nissue_count: 0\n```\nRegression risk in body.'), 0);
+  assert.equal(countReviewIssues('```yaml\nverdict: clean\nmajor_issue_count: many\n```'), 1);
+  assert.equal(countReviewIssues('major_issue_count: 0\n\n```yaml\nverdict: issues\nmajor_issue_count: 4\n```'), 1);
+  assert.equal(countReviewIssues('```yaml\nverdict: clean\nmajor_issue_count: 0\n```\nRegression risk in body.'), 0);
 });
 
 test('countReviewIssues converges only on an explicit clean verdict in loose prose', () => {
@@ -53,7 +53,7 @@ test('countReviewIssues converges only on an explicit clean verdict in loose pro
   assert.equal(countReviewIssues('Regression risk in parser.'), 1);
   // Prose that merely describes the verdict contract is not an explicit
   // clean verdict, so it must not converge to A/0.
-  assert.equal(countReviewIssues('Return `verdict: clean | issues` and `issue_count: <number>`.'), 1);
+  assert.equal(countReviewIssues('Return `verdict: clean | issues` and `major_issue_count: <number>`.'), 1);
 });
 
 test('quality detects missing-coverage prose via its issue keyword', () => {
@@ -77,7 +77,7 @@ test('review summary parser returns score, count, and synopsis', () => {
     '```yaml',
     'score: C',
     'verdict: issues',
-    'issue_count: 2',
+    'major_issue_count: 2',
     'summary: Needs a smaller clean fix.',
     '```',
     '',
@@ -100,7 +100,7 @@ test('quality summary parser uses YAML fields and grade fallback', () => {
     '```yaml',
     'score: C',
     'verdict: issues',
-    'issue_count: 3',
+    'major_issue_count: 3',
     'summary: "Needs smaller modules"',
     '```',
     '',
@@ -121,7 +121,7 @@ test('quality summary parser uses YAML fields and grade fallback', () => {
     '```yaml',
     'score: not-a-grade',
     'verdict: issues',
-    'issue_count: 2',
+    'major_issue_count: 2',
     'summary: Invalid score falls back from issue count.',
     '```',
   ].join('\n')), {
@@ -136,7 +136,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
     '```yaml',
     'score A',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Malformed fields make the block non-converged.',
     '```',
   ].join('\n');
@@ -150,22 +150,22 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   assert.equal(countReviewIssues([
     '```yaml',
     'verdict: clean',
-    'issue_count: 2',
+    'major_issue_count: 2',
     'summary: Contradictory but numeric count wins.',
     '```',
   ].join('\n')), 2);
   assert.equal(countReviewIssues([
     '```yaml',
     'verdict: issues',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Contradictory zero count cannot claim convergence.',
     '```',
   ].join('\n')), 1);
   assert.equal(countReviewIssues([
     '```yaml',
     'verdict: clean',
-    'issue_count: 0',
-    'issue_count: 3',
+    'major_issue_count: 0',
+    'major_issue_count: 3',
     'summary: Duplicate count is ambiguous.',
     '```',
   ].join('\n')), 1);
@@ -173,7 +173,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   const duplicateField = [
     '```yaml',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: First summary wins.',
     'summary: Duplicate summary is diagnostic.',
     '```',
@@ -190,7 +190,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
     'score: A',
     'score: F',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Looks fine.',
     '```',
   ].join('\n');
@@ -206,7 +206,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   assert.deepEqual(parseQualitySummary([
     '```yaml',
     'verdict: clean',
-    'issue_count: 2',
+    'major_issue_count: 2',
     'summary: Contradictory but numeric count wins.',
     '```',
   ].join('\n')), {
@@ -217,7 +217,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   assert.deepEqual(parseQualitySummary([
     '```yaml',
     'verdict: issues',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Contradictory zero count cannot claim convergence.',
     '```',
   ].join('\n')), {
@@ -228,7 +228,7 @@ test('cycle summary parsing treats structured summary diagnostics deterministica
   assert.deepEqual(parseQualitySummary([
     '```yaml',
     'verdict: clean',
-    'issue_count: nope',
+    'major_issue_count: nope',
     'summary: Malformed count cannot claim convergence.',
     '```',
   ].join('\n')), {
@@ -242,7 +242,7 @@ test('review and quality use explicit missing-count and verdict-driven policies'
   assert.equal(countReviewIssues([
     '```yaml',
     'verdict: clean',
-    'summary: Review summaries require issue_count to claim clean.',
+    'summary: Review summaries require major_issue_count to claim clean.',
     '```',
   ].join('\n')), 1);
   assert.equal(countReviewIssues([
@@ -279,7 +279,7 @@ test('quality summary parser lets fenced YAML take precedence over loose keyword
     '```yaml',
     'score: A',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Structured block is clean.',
     '```',
     '',
@@ -310,7 +310,7 @@ test('quality summary parser only honors fenced YAML at the top of the response'
     '```yaml',
     'score: A',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Real top-level verdict.',
     '```',
     '',
@@ -319,7 +319,7 @@ test('quality summary parser only honors fenced YAML at the top of the response'
     '```yaml',
     'score: F',
     'verdict: issues',
-    'issue_count: 9',
+    'major_issue_count: 9',
     'summary: Old verdict from a previous cycle.',
     '```',
   ].join('\n')), {
@@ -338,7 +338,7 @@ test('quality summary parser only honors fenced YAML at the top of the response'
     '```yaml',
     'score: F',
     'verdict: issues',
-    'issue_count: 9',
+    'major_issue_count: 9',
     'summary: Missing test coverage finding regression failure from a previous cycle.',
     '```',
   ].join('\n');
@@ -359,7 +359,7 @@ test('quality summary parser ignores QUALITY_ISSUE_PATTERN keywords inside fence
     '',
     '```yaml',
     'score: F',
-    'issue_count: 9',
+    'major_issue_count: 9',
     'summary: Missing test coverage finding regression failure.',
     '```',
   ].join('\n');
@@ -427,6 +427,32 @@ test('quality score helpers map counts and select the worst valid score', () => 
   assert.equal(scoreIsWorseThanTarget('A', 'B'), false);
 });
 
+test('minor issue counts do not block an A grade', () => {
+  assert.deepEqual(parseQualitySummary([
+    '```yaml',
+    'score: A',
+    'verdict: clean',
+    'major_issue_count: 0',
+    'minor_issue_count: 4',
+    'summary: Only minor incremental polish remains.',
+    '```',
+  ].join('\n')), {
+    score: 'A',
+    issueCount: 0,
+    minorIssueCount: 4,
+    synopsis: 'Only minor incremental polish remains.',
+  });
+
+  assert.deepEqual(summarizeQualityAreas([
+    { area: 'maintainability', score: 'A', issueCount: 0, minorIssueCount: 4, synopsis: 'Minor cleanup remains.' },
+  ]), {
+    score: 'A',
+    issueCount: 0,
+    minorIssueCount: 4,
+    synopsis: 'No major quality issues across 1 area; 4 minor. maintainability: A, 0 major, 4 minor - Minor cleanup remains.',
+  });
+});
+
 test('worstScore returns empty string for empty or all-invalid inputs', () => {
   assert.equal(worstScore([]), '');
   assert.equal(worstScore(['', 'not-a-score', undefined, null]), '');
@@ -445,7 +471,7 @@ test('quality summaries derive fallback synopsis from body text', () => {
   assert.deepEqual(parseQualitySummary([
     '```yaml',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     '```',
     '',
     '# Heading',

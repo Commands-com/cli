@@ -57,7 +57,8 @@ const QUALITY_OUTPUTS = Object.freeze([
 const EXPECTED_SUMMARY_FIELDS = Object.freeze([
   SUMMARY_FIELD.SCORE,
   SUMMARY_FIELD.VERDICT,
-  SUMMARY_FIELD.ISSUE_COUNT,
+  SUMMARY_FIELD.MAJOR_ISSUE_COUNT,
+  SUMMARY_FIELD.MINOR_ISSUE_COUNT,
   SUMMARY_FIELD.SUMMARY,
 ]);
 
@@ -84,7 +85,8 @@ function synthesisProviderBlock(prompt, label) {
 function assertSummaryContractBlock(body) {
   assert.match(body, /^score: A \| B \| C \| D \| F$/m);
   assert.match(body, /^verdict: clean \| issues$/m);
-  assert.match(body, /^issue_count: <number>$/m);
+  assert.match(body, /^major_issue_count: <number>$/m);
+  assert.match(body, /^minor_issue_count: <number>$/m);
   assert.match(body, /^summary: <one sentence>$/m);
 }
 
@@ -250,7 +252,7 @@ test('all internal prompt builders emit parseable intent metadata', () => {
         context,
         cycle: 5,
         reviewerOutputs: [
-          { provider: 'codex', role: 'correctness', text: '```yaml\nverdict: issues\nissue_count: 1\n```' },
+          { provider: 'codex', role: 'correctness', text: '```yaml\nverdict: issues\nmajor_issue_count: 1\n```' },
         ],
       }),
       expected: {
@@ -289,7 +291,7 @@ test('all internal prompt builders emit parseable intent metadata', () => {
             score: 'A',
             issueCount: 0,
             synopsis: 'clean',
-            text: '```yaml\nscore: A\nverdict: clean\nissue_count: 0\nsummary: Clean.\n```',
+            text: '```yaml\nscore: A\nverdict: clean\nmajor_issue_count: 0\nsummary: Clean.\n```',
           },
         ],
       }),

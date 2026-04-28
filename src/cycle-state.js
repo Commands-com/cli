@@ -103,9 +103,12 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @typedef {Object} CycleRecordBase
  * @property {number} cycle One-based cycle number.
  * @property {string} [score] Latest cycle score from the synthesis or output summary.
- * @property {number} [issueCount] Aggregate issue count for the cycle.
- * @property {number} [reviewerIssueCount] Review adapter pre-synthesis issue count.
- * @property {number} [providerIssueCount] Quality adapter pre-synthesis issue count.
+ * @property {number} [issueCount] Aggregate major issue count for the cycle.
+ * @property {number} [minorIssueCount] Aggregate minor issue count for the cycle.
+ * @property {number} [reviewerIssueCount] Review adapter pre-synthesis major issue count.
+ * @property {number} [reviewerMinorIssueCount] Review adapter pre-synthesis minor issue count.
+ * @property {number} [providerIssueCount] Quality adapter pre-synthesis major issue count.
+ * @property {number} [providerMinorIssueCount] Quality adapter pre-synthesis minor issue count.
  * @property {string} [synopsis] Cycle synopsis line.
  * @property {Array<Object>} [outputs] Quality adapter outputs.
  * @property {Array<Object>} [reviewers] Review adapter outputs.

@@ -386,7 +386,7 @@ test('runAssessmentCycles stops after an explicit empty implementation plan conv
         '```yaml',
         'score: B',
         'verdict: issues',
-        'issue_count: 1',
+        'major_issue_count: 1',
         'summary: One gated issue remains.',
         '```',
       ].join('\n')),

@@ -18,12 +18,16 @@ function hasSummaryDiagnostics(summary) {
 }
 
 function numericSummaryIssueCount(summary) {
-  if (summary.hasNumericIssueCount) {
-    if (summary.issueCount > 0) return summary.issueCount;
+  if (summary.hasNumericMajorIssueCount) {
+    if (summary.majorIssueCount > 0) return summary.majorIssueCount;
     if (summary.verdict === 'issues' || hasSummaryDiagnostics(summary)) return 1;
     return 0;
   }
   return undefined;
+}
+
+function numericSummaryMinorIssueCount(summary) {
+  return summary.hasNumericMinorIssueCount ? summary.minorIssueCount : 0;
 }
 
 function duplicateFieldNames(duplicates) {
@@ -53,11 +57,15 @@ function parseAssessmentSummary(text, { structured, fallback }) {
   const baseSynopsis = shorten(summary.summary || yamlScalar(firstBodyLine));
   const synopsis = annotateSynopsisDuplicates(baseSynopsis, summary.duplicates);
 
-  return {
+  const minorIssueCount = summary.found ? numericSummaryMinorIssueCount(summary) : 0;
+  /** @type {{ score: string, issueCount: number, minorIssueCount?: number, synopsis: string }} */
+  const result = {
     score: normalizeAssessmentScore(summary.score, issueCount),
     issueCount,
     synopsis,
   };
+  if (minorIssueCount > 0) result.minorIssueCount = minorIssueCount;
+  return result;
 }
 
 export function countReviewIssues(text) {
@@ -68,7 +76,7 @@ export function parseReviewSummary(text) {
   return parseAssessmentSummary(text, {
     structured: (summary) => {
       const numericCount = numericSummaryIssueCount(summary);
-      // Review convergence requires a numeric issue_count. A structured summary
+      // Review convergence requires a numeric major_issue_count. A structured summary
       // without one cannot claim that all issues are resolved.
       return numericCount !== undefined ? numericCount : 1;
     },
@@ -113,6 +121,10 @@ export function normalizedCycleIssueCount(value) {
   return normalizeIssueCount(value?.issueCount);
 }
 
+export function normalizedCycleMinorIssueCount(value) {
+  return normalizeIssueCount(value?.minorIssueCount);
+}
+
 export function normalizedCycleScore(value, { fallbackScore = '' } = {}) {
   const score = value?.score || fallbackScore;
   if (!score && value?.issueCount === undefined) return '';
@@ -131,6 +143,16 @@ export function formatIssueCount(count) {
   return `${count} ${count === 1 ? 'issue' : 'issues'}`;
 }
 
+export function formatIssueCounts(value, minorIssueCount = 0) {
+  const major = typeof value === 'object'
+    ? normalizedCycleIssueCount(value)
+    : normalizeIssueCount(value);
+  const minor = typeof value === 'object'
+    ? normalizedCycleMinorIssueCount(value)
+    : normalizeIssueCount(minorIssueCount);
+  return `${major} major, ${minor} minor`;
+}
+
 export function scoreIsWorseThanTarget(score, targetScore) {
   const scoreIndex = SCORE_ORDER.indexOf(String(score || '').trim().toUpperCase());
   const targetIndex = SCORE_ORDER.indexOf(String(targetScore || '').trim().toUpperCase());
@@ -138,17 +160,37 @@ export function scoreIsWorseThanTarget(score, targetScore) {
 }
 
 export function summarizeScoredOutputs(outputs, { noun, itemName, label }) {
-  const issueCount = outputs.reduce((sum, output) => sum + output.issueCount, 0);
+  const issueCount = outputs.reduce((sum, output) => sum + normalizedCycleIssueCount(output), 0);
+  const minorIssueCount = outputs.reduce((sum, output) => sum + normalizedCycleMinorIssueCount(output), 0);
   const score = worstScore(outputs.map((output) => output.score)) || gradeFromIssueCount(issueCount);
   const itemCount = `${outputs.length} ${outputs.length === 1 ? itemName : `${itemName}s`}`;
   const itemSummary = outputs
-    .map((output) => `${label(output)}: ${output.score}, ${formatIssueCount(output.issueCount)} - ${shorten(output.synopsis, 110)}`)
+    .map((output) => `${label(output)}: ${output.score}, ${formatScoredOutputIssueCounts(output)} - ${shorten(output.synopsis, 110)}`)
     .join('; ');
-  return {
+  const synopsis = issueCount === 0
+    ? cleanScoredOutputSynopsis({ noun, itemCount, minorIssueCount, itemSummary })
+    : issueScoredOutputSynopsis({ issueCount, minorIssueCount, itemCount, itemSummary });
+  /** @type {{ score: string, issueCount: number, minorIssueCount?: number, synopsis: string }} */
+  const summary = {
     score,
     issueCount,
-    synopsis: issueCount === 0
-      ? `No unresolved ${noun}s across ${itemCount}.`
-      : `${formatIssueCount(issueCount)} across ${itemCount}. ${itemSummary}`,
+    synopsis,
   };
+  if (minorIssueCount > 0) summary.minorIssueCount = minorIssueCount;
+  return summary;
+}
+
+function cleanScoredOutputSynopsis({ noun, itemCount, minorIssueCount, itemSummary }) {
+  if (minorIssueCount === 0) return `No unresolved ${noun}s across ${itemCount}.`;
+  return `No major ${noun}s across ${itemCount}; ${minorIssueCount} minor. ${itemSummary}`;
+}
+
+function issueScoredOutputSynopsis({ issueCount, minorIssueCount, itemCount, itemSummary }) {
+  if (minorIssueCount === 0) return `${formatIssueCount(issueCount)} across ${itemCount}. ${itemSummary}`;
+  return `${formatIssueCounts({ issueCount, minorIssueCount })} across ${itemCount}. ${itemSummary}`;
+}
+
+function formatScoredOutputIssueCounts(output) {
+  const minor = normalizedCycleMinorIssueCount(output);
+  return minor > 0 ? formatIssueCounts(output) : formatIssueCount(normalizedCycleIssueCount(output));
 }

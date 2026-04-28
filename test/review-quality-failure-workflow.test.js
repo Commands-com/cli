@@ -41,7 +41,7 @@ test('runReviewCommand logs provider retry and keeps reviewer artifact path stab
     const reviewText = [
       '```yaml',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       '```',
       '',
       'codex retry review finding',
@@ -88,7 +88,7 @@ const SYNTHESIS_FAILURE_CASES = [
     contentText: [
       '```yaml',
       'verdict: issues',
-      'issue_count: 2',
+      'major_issue_count: 2',
       '```',
       '',
       'codex fake review finding',
@@ -109,7 +109,7 @@ const SYNTHESIS_FAILURE_CASES = [
         '```yaml',
         'score: A',
         'verdict: clean',
-        'issue_count: 0',
+        'major_issue_count: 0',
         'summary: Claude found no maintainability issues.',
         '```',
         '',
@@ -138,7 +138,7 @@ const SYNTHESIS_FAILURE_CASES = [
       '```yaml',
       'score: B',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       'summary: Codex found one maintainability issue.',
       '```',
       '',
@@ -192,7 +192,7 @@ test('runReviewCommand preserves completed cycle artifacts when a later fix cycl
     const reviewText = [
       '```yaml',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       '```',
       '',
       'codex first cycle finding',
@@ -263,7 +263,7 @@ test('runReviewCommand preserves successful parallel fan-out artifacts when a si
     const reviewText = [
       '```yaml',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       '```',
       '',
       'codex first cycle finding',
@@ -271,7 +271,7 @@ test('runReviewCommand preserves successful parallel fan-out artifacts when a si
     const secondCycleSuccessText = [
       '```yaml',
       'verdict: clean',
-      'issue_count: 0',
+      'major_issue_count: 0',
       '```',
       '',
       'codex second cycle correctness clean',

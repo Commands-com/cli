@@ -1,6 +1,7 @@
 import { cycleReportHeader, worktreeNextSteps } from './cycle-report.js';
 import {
   normalizedCycleIssueCount,
+  normalizedCycleMinorIssueCount,
   normalizedCycleScore,
   scoreIsWorseThanTarget,
 } from './cycle-summary.js';
@@ -17,8 +18,11 @@ import {
  * @typedef {object} AssessmentFinalCycle
  * @property {string} [score]
  * @property {number} [issueCount]
+ * @property {number} [minorIssueCount]
  * @property {number} [reviewerIssueCount]
+ * @property {number} [reviewerMinorIssueCount]
  * @property {number} [providerIssueCount]
+ * @property {number} [providerMinorIssueCount]
  * @property {string} [synopsis]
  * @property {number} [cycle]
  * @property {string} [synthesis]
@@ -42,6 +46,7 @@ import {
 export const DEFAULT_QUALITY_FINAL_CYCLE = Object.freeze({
   score: 'A',
   issueCount: 0,
+  minorIssueCount: 0,
   synopsis: 'No quality audit outputs were produced.',
   outputs: Object.freeze([]),
 });
@@ -49,22 +54,28 @@ export const DEFAULT_QUALITY_FINAL_CYCLE = Object.freeze({
 export const DEFAULT_REVIEW_FINAL_CYCLE = Object.freeze({
   score: 'A',
   issueCount: 0,
+  minorIssueCount: 0,
   reviewerIssueCount: 0,
+  reviewerMinorIssueCount: 0,
   synopsis: 'No review outputs were produced.',
   reviewers: Object.freeze([]),
 });
 
 const REVIEW_REPORT_MODE = {
-  perCycleIssueCountLabel: 'Reviewer issue count',
+  perCycleIssueCountLabel: 'Reviewer major issue count',
   perCycleIssueCountKey: 'reviewerIssueCount',
+  perCycleMinorIssueCountLabel: 'Reviewer minor issue count',
+  perCycleMinorIssueCountKey: 'reviewerMinorIssueCount',
   itemsKey: 'reviewers',
   itemFieldName: 'role',
   fallback: DEFAULT_REVIEW_FINAL_CYCLE,
 };
 
 const QUALITY_REPORT_MODE = {
-  perCycleIssueCountLabel: 'Provider issue count',
+  perCycleIssueCountLabel: 'Provider major issue count',
   perCycleIssueCountKey: 'providerIssueCount',
+  perCycleMinorIssueCountLabel: 'Provider minor issue count',
+  perCycleMinorIssueCountKey: 'providerMinorIssueCount',
   itemsKey: 'outputs',
   itemFieldName: 'area',
   fallback: DEFAULT_QUALITY_FINAL_CYCLE,
@@ -99,21 +110,32 @@ function formatAssessmentReportByMode(state, mode, { title, finalCycle }) {
     state,
     summaryLines: [
       `Score: ${selectedFinalCycle.score}`,
-      `Issue count: ${selectedFinalCycle.issueCount}`,
+      `Major issue count: ${selectedFinalCycle.issueCount}`,
+      ...minorIssueLine(selectedFinalCycle),
       `Synopsis: ${selectedFinalCycle.synopsis}`,
       ...fanoutFailuresSummaryLines(selectedFinalCycle),
     ],
     renderCycle: (cycle) => formatAssessmentCycle(cycle, {
       summaryLines: [
         `Score: ${cycle.score}`,
-        `Issue count: ${cycle.issueCount}`,
-        `${mode.perCycleIssueCountLabel}: ${cycle[mode.perCycleIssueCountKey]}`,
+        `Major issue count: ${cycle.issueCount}`,
+        ...minorIssueLine(cycle),
+        `${mode.perCycleIssueCountLabel}: ${cycle[mode.perCycleIssueCountKey] ?? 0}`,
+        ...minorIssueLine(
+          { minorIssueCount: cycle[mode.perCycleMinorIssueCountKey] },
+          mode.perCycleMinorIssueCountLabel,
+        ),
         `Synopsis: ${cycle.synopsis}`,
       ],
       itemSections: (cycle[mode.itemsKey] || [])
         .map((item) => `### ${item.provider} / ${item[mode.itemFieldName]}\n\n${item.text}`),
     }),
   });
+}
+
+function minorIssueLine(cycle, label = 'Minor issue count') {
+  const count = normalizedCycleMinorIssueCount(cycle);
+  return count > 0 ? [`${label}: ${count}`] : [];
 }
 
 function selectFinalCycle(cycles, fallback) {
@@ -192,11 +214,13 @@ function formatTestResult(test) {
 export function finalCycleWithDefaults(cycle, fallback) {
   if (!cycle) return fallback;
   const issueCount = normalizedCycleIssueCount(cycle);
+  const minorIssueCount = normalizedCycleMinorIssueCount(cycle);
   return {
     ...fallback,
     ...cycle,
     score: normalizedCycleScore(cycle, { fallbackScore: fallback.score }),
     issueCount,
+    minorIssueCount,
     synopsis: cycle.synopsis || fallback.synopsis,
   };
 }

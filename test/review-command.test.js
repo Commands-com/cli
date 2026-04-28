@@ -22,7 +22,7 @@ function reviewText(issueCount) {
     '```yaml',
     `score: ${score}`,
     `verdict: ${issueCount > 0 ? 'issues' : 'clean'}`,
-    `issue_count: ${issueCount}`,
+    `major_issue_count: ${issueCount}`,
     `summary: ${summary}`,
     '```',
     '',

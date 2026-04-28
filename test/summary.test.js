@@ -17,12 +17,12 @@ test('parseSummaryBlock can require a top summary block', () => {
     '',
     '```yaml',
     'verdict: issues',
-    'issue_count: 2',
+    'major_issue_count: 2',
     '```',
   ].join('\n');
 
   assert.equal(parseSummaryBlock(text, { topOnly: true }).found, false);
-  assert.match(parseSummaryBlock(text).yaml, /issue_count: 2/);
+  assert.match(parseSummaryBlock(text).yaml, /major_issue_count: 2/);
 });
 
 test('summary block extraction ignores malformed and non-yaml fences', () => {
@@ -41,7 +41,8 @@ test('parseSummary parses allowed fields and scalars', () => {
     'score: "b"',
     "summary: 'Quoted summary'",
     'verdict: clean',
-    'issue_count: "0"',
+    'major_issue_count: "0"',
+    'minor_issue_count: "2"',
   ].join('\n');
 
   const parsed = parseSummary(yaml);
@@ -51,18 +52,24 @@ test('parseSummary parses allowed fields and scalars', () => {
     score: '"b"',
     summary: "'Quoted summary'",
     verdict: 'clean',
-    issue_count: '"0"',
+    major_issue_count: '"0"',
+    minor_issue_count: '"2"',
   });
   assert.equal(parsed.score, 'B');
   assert.equal(parsed.summary, 'Quoted summary');
   assert.equal(parsed.verdict, 'clean');
   assert.equal(parsed.issueCount, 0);
+  assert.equal(parsed.majorIssueCount, 0);
+  assert.equal(parsed.minorIssueCount, 2);
   assert.equal(parsed.hasNumericIssueCount, true);
+  assert.equal(parsed.hasNumericMajorIssueCount, true);
+  assert.equal(parsed.hasNumericMinorIssueCount, true);
 });
 
 test('parseSummary accepts every field from the centralized summary contract', () => {
   const values = {
-    [SUMMARY_FIELD.ISSUE_COUNT]: '0',
+    [SUMMARY_FIELD.MAJOR_ISSUE_COUNT]: '0',
+    [SUMMARY_FIELD.MINOR_ISSUE_COUNT]: '2',
     [SUMMARY_FIELD.SCORE]: 'A',
     [SUMMARY_FIELD.SUMMARY]: 'Centralized summary contract.',
     [SUMMARY_FIELD.VERDICT]: 'clean',
@@ -73,6 +80,7 @@ test('parseSummary accepts every field from the centralized summary contract', (
 
   assert.deepEqual(Object.keys(parsed.fields), SUMMARY_FIELD_NAMES);
   assert.equal(parsed.issueCount, 0);
+  assert.equal(parsed.minorIssueCount, 2);
   assert.equal(parsed.score, 'A');
   assert.equal(parsed.summary, 'Centralized summary contract.');
   assert.equal(parsed.verdict, 'clean');
@@ -84,7 +92,8 @@ test('parseSummaryBlock reports malformed summary fields without dropping valid 
     'score B',
     '  stray: value',
     'verdict: clean',
-    'issue_count: nope',
+    'major_issue_count: nope',
+    'minor_issue_count: also-nope',
     'summary: Parser kept valid fields.',
     '```',
   ].join('\n'));
@@ -94,6 +103,9 @@ test('parseSummaryBlock reports malformed summary fields without dropping valid 
   assert.equal(parsed.issueCountPresent, true);
   assert.equal(parsed.hasNumericIssueCount, false);
   assert.equal(parsed.issueCount, undefined);
+  assert.equal(parsed.minorIssueCountPresent, true);
+  assert.equal(parsed.hasNumericMinorIssueCount, false);
+  assert.equal(parsed.minorIssueCount, undefined);
   assert.equal(parsed.summary, 'Parser kept valid fields.');
   assert.deepEqual(parsed.malformed, [
     {
@@ -107,14 +119,21 @@ test('parseSummaryBlock reports malformed summary fields without dropping valid 
       text: '  stray: value',
     },
     {
-      field: 'issue_count',
+      field: 'major_issue_count',
       line: 4,
-      reason: 'invalid-issue-count',
-      text: 'issue_count: nope',
+      reason: 'invalid-major-issue-count',
+      text: 'major_issue_count: nope',
+    },
+    {
+      field: 'minor_issue_count',
+      line: 5,
+      reason: 'invalid-minor-issue-count',
+      text: 'minor_issue_count: also-nope',
     },
   ]);
   assert.equal(parsed.hasMalformedFields, true);
   assert.equal(parsed.hasMalformedIssueCount, true);
+  assert.equal(parsed.hasMalformedMinorIssueCount, true);
 });
 
 test('parseSummary supports quoted and multiline summaries', () => {
@@ -150,23 +169,23 @@ test('parseSummary supports quoted and multiline summaries', () => {
   );
 });
 
-test('parseSummary exposes missing and non-numeric issue counts explicitly', () => {
+test('parseSummary exposes missing and non-numeric major issue counts explicitly', () => {
   const missing = parseSummary('verdict: issues');
   assert.equal(missing.issueCountPresent, false);
   assert.equal(missing.hasNumericIssueCount, false);
   assert.equal(missing.issueCount, undefined);
 
-  const malformed = parseSummary('verdict: issues\nissue_count: many');
+  const malformed = parseSummary('verdict: issues\nmajor_issue_count: many');
   assert.equal(malformed.issueCountPresent, true);
   assert.equal(malformed.hasNumericIssueCount, false);
   assert.equal(malformed.issueCount, undefined);
   assert.equal(malformed.hasMalformedIssueCount, true);
   assert.deepEqual(malformed.malformed, [
     {
-      field: 'issue_count',
+      field: 'major_issue_count',
       line: 2,
-      reason: 'invalid-issue-count',
-      text: 'issue_count: many',
+      reason: 'invalid-major-issue-count',
+      text: 'major_issue_count: many',
     },
   ]);
 });
@@ -204,7 +223,7 @@ test('parseSummary consumes duplicate block scalars without cascading malformed 
     'summary: |',
     '  Duplicate block content',
     '  is ignored.',
-    'issue_count: 0',
+    'major_issue_count: 0',
   ].join('\n'));
 
   assert.equal(parsed.summary, 'First summary wins.');
@@ -220,20 +239,20 @@ test('parseSummary consumes duplicate block scalars without cascading malformed 
   ]);
 });
 
-test('parseSummary reports contradictory verdict and issue_count fields but keeps numeric count', () => {
-  const cleanWithIssues = parseSummary('verdict: clean\nissue_count: 2');
+test('parseSummary reports contradictory verdict and major_issue_count fields but keeps numeric count', () => {
+  const cleanWithIssues = parseSummary('verdict: clean\nmajor_issue_count: 2');
   assert.equal(cleanWithIssues.issueCount, 2);
   assert.equal(cleanWithIssues.contradictsVerdict, true);
-  assert.deepEqual(cleanWithIssues.contradictions, ['clean-with-positive-issue-count']);
+  assert.deepEqual(cleanWithIssues.contradictions, ['clean-with-positive-major-issue-count']);
 
-  const issuesWithZero = parseSummary('verdict: issues\nissue_count: 0');
+  const issuesWithZero = parseSummary('verdict: issues\nmajor_issue_count: 0');
   assert.equal(issuesWithZero.issueCount, 0);
   assert.equal(issuesWithZero.contradictsVerdict, true);
-  assert.deepEqual(issuesWithZero.contradictions, ['issues-with-zero-issue-count']);
+  assert.deepEqual(issuesWithZero.contradictions, ['issues-with-zero-major-issue-count']);
 });
 
 test('review summaries use loose YAML-like verdict detection only for issues verdicts', () => {
   assert.equal(countReviewIssues('verdict: issues\nsummary: Unfenced review synthesis.'), 1);
   assert.equal(countReviewIssues('verdict: clean\nsummary: Unfenced review synthesis.'), 0);
-  assert.equal(countReviewIssues('Return `verdict: clean | issues` and `issue_count: <number>`.'), 1);
+  assert.equal(countReviewIssues('Return `verdict: clean | issues` and `major_issue_count: <number>`.'), 1);
 });

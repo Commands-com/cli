@@ -197,7 +197,7 @@ test('runAssessmentCycles calls output and synthesis summary hooks separately fo
     assert.equal(summaryCalls[0].outputs.length, 2);
     assert.equal(summaryCalls[0].outputs[0].provider, 'mock');
     assert.equal(summaryCalls[1].outputSummary.issueCount, 3);
-    assert.match(summaryCalls[1].synthesisText, /issue_count: 0/);
+    assert.match(summaryCalls[1].synthesisText, /major_issue_count: 0/);
     assert.equal(state.cycles[0].source, 'synthesis');
     assert.equal(state.cycles[0].usedOutputSummary, false);
     assert.equal(state.cycles[0].issueCount, 0);

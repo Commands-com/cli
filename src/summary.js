@@ -105,10 +105,10 @@ function parsedIssueCount(value) {
   return Number.isSafeInteger(count) ? count : undefined;
 }
 
-function verdictContradictions(verdict, issueCount, hasNumericIssueCount) {
-  if (!hasNumericIssueCount) return [];
-  if (verdict === 'clean' && issueCount > 0) return ['clean-with-positive-issue-count'];
-  if (verdict === 'issues' && issueCount === 0) return ['issues-with-zero-issue-count'];
+function verdictContradictions(verdict, majorIssueCount, hasNumericMajorIssueCount) {
+  if (!hasNumericMajorIssueCount) return [];
+  if (verdict === 'clean' && majorIssueCount > 0) return ['clean-with-positive-major-issue-count'];
+  if (verdict === 'issues' && majorIssueCount === 0) return ['issues-with-zero-major-issue-count'];
   return [];
 }
 
@@ -162,29 +162,44 @@ export function parseSummary(summaryContent) {
     }
   }
 
-  const issueCountPresent = Object.hasOwn(fields, SUMMARY_FIELD.ISSUE_COUNT);
-  const issueCount = parsedIssueCount(fields[SUMMARY_FIELD.ISSUE_COUNT]);
-  const hasNumericIssueCount = issueCount !== undefined;
-  const hasMalformedIssueCount = issueCountPresent && !hasNumericIssueCount;
-  if (hasMalformedIssueCount) {
-    malformed.push(malformedField(fieldRecords[SUMMARY_FIELD.ISSUE_COUNT], 'invalid-issue-count'));
+  const majorIssueCountPresent = Object.hasOwn(fields, SUMMARY_FIELD.MAJOR_ISSUE_COUNT);
+  const minorIssueCountPresent = Object.hasOwn(fields, SUMMARY_FIELD.MINOR_ISSUE_COUNT);
+  const majorIssueCount = parsedIssueCount(fields[SUMMARY_FIELD.MAJOR_ISSUE_COUNT]);
+  const minorIssueCount = parsedIssueCount(fields[SUMMARY_FIELD.MINOR_ISSUE_COUNT]);
+  const hasNumericMajorIssueCount = majorIssueCount !== undefined;
+  const hasNumericMinorIssueCount = minorIssueCount !== undefined;
+  const hasMalformedMajorIssueCount = majorIssueCountPresent && !hasNumericMajorIssueCount;
+  const hasMalformedMinorIssueCount = minorIssueCountPresent && !hasNumericMinorIssueCount;
+  if (hasMalformedMajorIssueCount) {
+    malformed.push(malformedField(fieldRecords[SUMMARY_FIELD.MAJOR_ISSUE_COUNT], 'invalid-major-issue-count'));
+  }
+  if (hasMalformedMinorIssueCount) {
+    malformed.push(malformedField(fieldRecords[SUMMARY_FIELD.MINOR_ISSUE_COUNT], 'invalid-minor-issue-count'));
   }
   malformed.sort((a, b) => a.line - b.line || a.reason.localeCompare(b.reason));
   const verdict = normalizedVerdict(fields[SUMMARY_FIELD.VERDICT]);
-  const contradictions = verdictContradictions(verdict, issueCount, hasNumericIssueCount);
+  const contradictions = verdictContradictions(verdict, majorIssueCount, hasNumericMajorIssueCount);
   const hasMalformedFields = malformed.length > 0;
 
   return {
     fields,
     score: normalizedScore(fields[SUMMARY_FIELD.SCORE]),
     verdict,
-    issueCount,
-    issueCountPresent,
-    hasNumericIssueCount,
+    issueCount: majorIssueCount,
+    majorIssueCount,
+    minorIssueCount,
+    issueCountPresent: majorIssueCountPresent,
+    majorIssueCountPresent,
+    minorIssueCountPresent,
+    hasNumericIssueCount: hasNumericMajorIssueCount,
+    hasNumericMajorIssueCount,
+    hasNumericMinorIssueCount,
     summary: yamlScalar(fields[SUMMARY_FIELD.SUMMARY]),
     malformed,
     hasMalformedFields,
-    hasMalformedIssueCount,
+    hasMalformedIssueCount: hasMalformedMajorIssueCount,
+    hasMalformedMajorIssueCount,
+    hasMalformedMinorIssueCount,
     duplicates,
     hasDuplicateFields: duplicates.length > 0,
     contradictions,

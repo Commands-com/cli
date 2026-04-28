@@ -4,7 +4,7 @@ import { ASSESSMENT_SUMMARY_CONTRACT } from './summary-contract.js';
 
 /**
  * @typedef {import('./cycle-state.js').CycleRepoContext} CycleRepoContext
- * @typedef {{ provider: string, text: string, role?: string, area?: string, score?: string, issueCount?: number, synopsis?: string }} AssessmentProviderOutput
+ * @typedef {{ provider: string, text: string, role?: string, area?: string, score?: string, issueCount?: number, minorIssueCount?: number, synopsis?: string }} AssessmentProviderOutput
  * @typedef {Record<string, string|number|boolean|string[]>} AssessmentPromptIntent
  * @typedef {{ summaryNoun: string, summaryContract: ReadonlyArray<string>, trailing?: ReadonlyArray<string> }} AssessmentPromptConfig
  * @typedef {{ opening: string, instructionLines?: ReadonlyArray<string>, detailLines?: ReadonlyArray<string>, context: CycleRepoContext, bodyParts?: ReadonlyArray<string>, config: AssessmentPromptConfig, trailingIntro?: string, trailingLines?: ReadonlyArray<string> }} AssessmentPromptPartsArgs
@@ -20,6 +20,7 @@ const CURRENT_CODEBASE_SCOPE_GUIDANCE = 'Judge the current codebase, not hypothe
 const SCORE_RUBRIC_GUIDANCE = [
   'Calibrate severity strictly: A means no high-leverage actionable issues remain; B means healthy code with a few meaningful non-urgent improvements; C means moderate repeated change cost; D means serious near-term risk; F means validation is red, behavior is broken, data can be lost, security is compromised, or the code is very hard to change.',
   'Do not grade aspirational improvements, optional coverage, large tests, or minor duplication as D/F unless they create concrete near-term change risk.',
+  'major_issue_count counts actionable findings worth another fix cycle; minor_issue_count counts optional cleanup, polish, or hardening that should be visible but should not block an A.',
   'if only minor cleanup and incremental hardening remain then grade it an A',
 ].join(' ');
 const CODE_REDUCTION_GUIDANCE = 'More broadly, prefer deleting code, collapsing paths, and reducing concepts over introducing new abstractions.';
@@ -122,7 +123,8 @@ export function formatReviewAssessmentOutputs(outputs) {
     heading: (output) => `${output.provider} / ${output.role}`,
     details: (output) => output.score ? [
       `Score: ${output.score}`,
-      `Issue count: ${output.issueCount}`,
+      `Major issue count: ${output.issueCount}`,
+      `Minor issue count: ${output.minorIssueCount ?? 0}`,
       `Synopsis: ${output.synopsis}`,
     ] : [],
   });
@@ -134,7 +136,8 @@ export function formatQualityAssessmentOutputs(outputs) {
     heading: (output) => `${output.provider} / ${output.area}`,
     details: (output) => [
       `Score: ${output.score}`,
-      `Issue count: ${output.issueCount}`,
+      `Major issue count: ${output.issueCount}`,
+      `Minor issue count: ${output.minorIssueCount ?? 0}`,
       `Synopsis: ${output.synopsis}`,
     ],
   });
@@ -266,7 +269,7 @@ function buildSynthesisPrompt({
 
 /** @param {string} text */
 function promptTextHasIssues(text) {
-  return /(?:issue_count|issue count):\s*[1-9]\d*/i.test(String(text || ''))
+  return /(?:major_issue_count|major issue count):\s*[1-9]\d*/i.test(String(text || ''))
     || /verdict:\s*issues/i.test(String(text || ''));
 }
 

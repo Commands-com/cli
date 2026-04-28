@@ -64,7 +64,7 @@ test('runSynthesisWithFallback writes prompt and synthesis artifacts', async () 
       '',
       '```yaml',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       '```',
       '',
       '<!-- commands-com-prompt-intent: {"kind":"review-synthesis","cycle":1,"inputLabel":"Reviewer outputs:"} -->',

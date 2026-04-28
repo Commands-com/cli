@@ -15,7 +15,7 @@ test('assessment summaries do not preserve score A with unresolved issues', () =
   const text = summaryBlock([
     'score: A',
     'verdict: clean',
-    'issue_count: 2',
+    'major_issue_count: 2',
     'summary: Positive issue counts must control the final score.',
   ]);
 
@@ -35,7 +35,7 @@ test('assessment summaries treat contradictory issues verdicts as unresolved', (
   const text = summaryBlock([
     'score: A',
     'verdict: issues',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: An issues verdict cannot pass with a zero count.',
   ]);
 

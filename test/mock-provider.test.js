@@ -22,7 +22,7 @@ test('mock synthesis uses the final trailing intent marker when multiple markers
       '',
       '```yaml',
       'verdict: issues',
-      'issue_count: 4',
+      'major_issue_count: 4',
       '```',
       '',
       intentMarker({ kind: 'review-synthesis', cycle: 2, synthesisHasIssues: false }),
@@ -31,7 +31,7 @@ test('mock synthesis uses the final trailing intent marker when multiple markers
   });
 
   assert.match(text, /verdict: clean/);
-  assert.match(text, /issue_count: 0/);
+  assert.match(text, /major_issue_count: 0/);
 });
 
 test('mock synthesis ignores earlier markers when the trailing marker is malformed', () => {
@@ -43,7 +43,7 @@ test('mock synthesis ignores earlier markers when the trailing marker is malform
       '',
       '```yaml',
       'verdict: clean',
-      'issue_count: 0',
+      'major_issue_count: 0',
       '```',
       '',
       '<!-- commands-com-prompt-intent: {"kind":"review-synthesis","cycle":2 -->',
@@ -52,7 +52,7 @@ test('mock synthesis ignores earlier markers when the trailing marker is malform
   });
 
   assert.match(text, /verdict: issues/);
-  assert.match(text, /issue_count: 1/);
+  assert.match(text, /major_issue_count: 1/);
   assert.match(text, /Mock provider finding: this run path is wired correctly\./);
   assert.doesNotMatch(text, /Mock synthesis:/);
 });
@@ -191,7 +191,7 @@ test('runProvider lets mock consume trailing prompt intent markers before synthe
     '```yaml',
     'score: B',
     'verdict: issues',
-    'issue_count: 1',
+    'major_issue_count: 1',
     'summary: One issue.',
     '```',
     '',
@@ -204,7 +204,7 @@ test('runProvider lets mock consume trailing prompt intent markers before synthe
   );
 
   assert.match(result.text, /score: B/);
-  assert.match(result.text, /issue_count: 1/);
+  assert.match(result.text, /major_issue_count: 1/);
 });
 
 test('mock provider gives explicit intent precedence over trailing prompt markers', () => {
@@ -215,7 +215,7 @@ test('mock provider gives explicit intent precedence over trailing prompt marker
       'Reviewer outputs:',
       '```yaml',
       'verdict: clean',
-      'issue_count: 0',
+      'major_issue_count: 0',
       '```',
       '',
       '<!-- commands-com-prompt-intent: {"kind":"implementation-plan"} -->',
@@ -236,7 +236,7 @@ test('mock synthesis ignores prior findings issue counts outside the output sect
     'Previously reported findings:',
     '```yaml',
     'verdict: issues',
-    'issue_count: 4',
+    'major_issue_count: 4',
     '```',
     '',
     'Reviewer outputs:',
@@ -244,7 +244,7 @@ test('mock synthesis ignores prior findings issue counts outside the output sect
     '',
     '```yaml',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     '```',
     '',
     '<!-- commands-com-prompt-intent: {"kind":"review-synthesis","cycle":2,"inputLabel":"Reviewer outputs:"} -->',
@@ -256,7 +256,7 @@ test('mock synthesis ignores prior findings issue counts outside the output sect
     '```yaml',
     'score: B',
     'verdict: issues',
-    'issue_count: 3',
+    'major_issue_count: 3',
     'summary: Prior issue.',
     '```',
     '',
@@ -266,7 +266,7 @@ test('mock synthesis ignores prior findings issue counts outside the output sect
     '```yaml',
     'score: A',
     'verdict: clean',
-    'issue_count: 0',
+    'major_issue_count: 0',
     'summary: Clean now.',
     '```',
     '',
@@ -283,7 +283,7 @@ test('mock synthesis ignores prior findings issue counts outside the output sect
   );
 
   assert.match(review.text, /verdict: clean/);
-  assert.match(review.text, /issue_count: 0/);
+  assert.match(review.text, /major_issue_count: 0/);
   assert.match(quality.text, /score: A/);
   assert.match(quality.text, /verdict: clean/);
   assert.match(quality.text, /summary: Mock quality synthesis found no unresolved issues\./);
@@ -318,18 +318,18 @@ test('runMockProvider handles review synthesis prompts', () => {
     prompt: [
       'Synthesize review findings for a Commands.com review cycle.',
       'Repository context:',
-      'issue_count: 4',
+      'major_issue_count: 4',
       'Reviewer outputs:',
       '```yaml',
       'verdict: clean',
-      'issue_count: 0',
+      'major_issue_count: 0',
       '```',
     ].join('\n'),
     promptIntent: { kind: 'review-synthesis', synthesisIssueCount: 0 },
     allowTools: false,
   });
   assert.match(clean, /verdict: clean/);
-  assert.match(clean, /issue_count: 0/);
+  assert.match(clean, /major_issue_count: 0/);
   assert.match(clean, /Mock synthesis: the current reviewer pass is clean\./);
 
   const issues = mockText({
@@ -338,14 +338,14 @@ test('runMockProvider handles review synthesis prompts', () => {
       'Reviewer outputs:',
       '```yaml',
       'verdict: issues',
-      'issue_count: 2',
+      'major_issue_count: 2',
       '```',
     ].join('\n'),
     promptIntent: { kind: 'review-synthesis', synthesisIssueCount: 1 },
     allowTools: false,
   });
   assert.match(issues, /verdict: issues/);
-  assert.match(issues, /issue_count: 1/);
+  assert.match(issues, /major_issue_count: 1/);
   assert.match(issues, /Mock synthesis: reviewers found actionable issues\./);
 });
 
@@ -359,7 +359,7 @@ test('runMockProvider handles quality synthesis prompts', () => {
       '```yaml',
       'score: A',
       'verdict: clean',
-      'issue_count: 0',
+      'major_issue_count: 0',
       '```',
     ].join('\n'),
     promptIntent: { kind: 'quality-synthesis', synthesisIssueCount: 0 },
@@ -376,7 +376,7 @@ test('runMockProvider handles quality synthesis prompts', () => {
       '```yaml',
       'score: C',
       'verdict: issues',
-      'issue_count: 3',
+      'major_issue_count: 3',
       '```',
     ].join('\n'),
     promptIntent: { kind: 'quality-synthesis', synthesisIssueCount: 1 },
@@ -394,7 +394,7 @@ test('runMockProvider handles follow-up review, quality audit, and default revie
       'Previously reported findings:',
       '```yaml',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
       '```',
     ].join('\n'),
     promptIntent: { kind: 'review', hasPriorFindings: true },

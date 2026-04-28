@@ -64,7 +64,7 @@ function scoreText(score, issueCount, summary) {
   return yamlBlock({
     score,
     verdict: issueCount > 0 ? 'issues' : 'clean',
-    issue_count: issueCount,
+    major_issue_count: issueCount,
     summary,
   }, body);
 }
@@ -138,7 +138,7 @@ test('runReviewCommand JSON contract includes report path and content', async ()
 
     const report = await fs.readFile(output.reportPath, 'utf8');
     assert.match(report, /# Review Cycle: contract review/);
-    assert.match(report, /Reviewer issue count: 1/);
+    assert.match(report, /Reviewer major issue count: 1/);
     assert.match(report, /One mock review issue/);
     assert.equal(output.cycles[0].synthesis, '');
     assert.equal(
@@ -389,26 +389,26 @@ const SUMMARIZE_CASES = [
     command: REVIEW,
     title: 'summary contract',
     flags: { reviewers: 'correctness,tests' },
-    outputText: yamlBlock({ verdict: 'issues', issue_count: 1 }, 'codex reviewer output found one candidate issue.'),
-    synthesisText: yamlBlock({ verdict: 'clean', issue_count: 0 }, 'codex synthesis marked the reviewer candidates non-actionable.'),
+    outputText: yamlBlock({ verdict: 'issues', major_issue_count: 1 }, 'codex reviewer output found one candidate issue.'),
+    synthesisText: yamlBlock({ verdict: 'clean', major_issue_count: 0 }, 'codex synthesis marked the reviewer candidates non-actionable.'),
     assertions: ({ output, cycle, synthesisText }) => {
       assert.equal(cycle.issueCount, 0);
       assert.equal(cycle.reviewerIssueCount, 2);
       assert.equal(cycle.synthesis, synthesisText);
       assert.equal(cycle.synthesisError, '');
       assert.equal(cycle.reviewers[0].text, output.cycles[0].reviewers[0].text);
-      return /Reviewer issue count: 2/;
+      return /Reviewer major issue count: 2/;
     },
   },
   {
     command: QUALITY,
     title: '',
     outputText: yamlBlock(
-      { score: 'D', verdict: 'issues', issue_count: 4, summary: 'Provider output found four maintainability issues.' },
+      { score: 'D', verdict: 'issues', major_issue_count: 4, summary: 'Provider output found four maintainability issues.' },
       'codex quality output found four candidate maintainability issues.',
     ),
     synthesisText: yamlBlock(
-      { score: 'A', verdict: 'clean', issue_count: 0, summary: 'Synthesis marked provider findings non-actionable.' },
+      { score: 'A', verdict: 'clean', major_issue_count: 0, summary: 'Synthesis marked provider findings non-actionable.' },
       'codex quality synthesis marked the provider candidates non-actionable.',
     ),
     assertions: ({ output, cycle }) => {
@@ -420,7 +420,7 @@ const SUMMARIZE_CASES = [
       assert.equal(cycle.outputs[0].issueCount, 4);
       assert.equal(cycle.synthesis, '');
       assert.equal(cycle.synthesisError, '');
-      return /Provider issue count: 4/;
+      return /Provider major issue count: 4/;
     },
   },
 ];
@@ -455,21 +455,21 @@ const BLANK_SYNTHESIS_CASES = [
   {
     command: REVIEW,
     title: 'blank synthesis fallback',
-    outputText: yamlBlock({ verdict: 'issues', issue_count: 2 }, 'codex reviewer output found two actionable issues.'),
+    outputText: yamlBlock({ verdict: 'issues', major_issue_count: 2 }, 'codex reviewer output found two actionable issues.'),
     assertions: ({ output, cycle, outputText }) => {
       assert.equal(cycle.issueCount, 2);
       assert.equal(cycle.reviewerIssueCount, 2);
       assert.equal(cycle.reviewers[0].text, outputText);
       assert.equal(cycle.synthesis.trim(), '');
       assert.equal(cycle.synthesisError, '');
-      assert.match(output.report, /Reviewer issue count: 2/);
+      assert.match(output.report, /Reviewer major issue count: 2/);
     },
   },
   {
     command: QUALITY,
     title: '',
     outputText: yamlBlock(
-      { score: 'D', verdict: 'issues', issue_count: 4, summary: 'Provider output found four maintainability issues.' },
+      { score: 'D', verdict: 'issues', major_issue_count: 4, summary: 'Provider output found four maintainability issues.' },
       'codex quality output found four candidate maintainability issues.',
     ),
     assertions: ({ output, cycle }) => {
@@ -480,7 +480,7 @@ const BLANK_SYNTHESIS_CASES = [
       assert.equal(cycle.outputs[0].issueCount, 4);
       assert.equal(cycle.synthesis.trim(), '');
       assert.equal(cycle.synthesisError, '');
-      assert.match(output.report, /Provider issue count: 4/);
+      assert.match(output.report, /Provider major issue count: 4/);
     },
   },
 ];
@@ -530,7 +530,7 @@ test('runQualityCommand report output remains stable for a single mock area', as
       'Repository: <repo>',
       'Workspace mode: current',
       'Score: B',
-      'Issue count: 1',
+      'Major issue count: 1',
       'Synopsis: 1 issue across 1 provider audit. mock: maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '',
       '',
@@ -539,15 +539,16 @@ test('runQualityCommand report output remains stable for a single mock area', as
       '',
       '## Cycle 1',
       'Score: B',
-      'Issue count: 1',
-      'Provider issue count: 1',
+      'Major issue count: 1',
+      'Provider major issue count: 1',
       'Synopsis: 1 issue across 1 provider audit. mock: maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '### mock / maintainability',
       '',
       '```yaml',
       'score: B',
       'verdict: issues',
-      'issue_count: 1',
+      'major_issue_count: 1',
+      'minor_issue_count: 0',
       'summary: One mock quality issue was found in this area.',
       '```',
       '',

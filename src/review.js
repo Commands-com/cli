@@ -12,7 +12,7 @@ import {
 } from './assessment-completion.js';
 import { metadataListOption, readResumeMetadata } from './resume-metadata.js';
 import {
-  formatIssueCount,
+  formatIssueCounts,
   parseReviewSummary,
   summarizeScoredOutputs,
 } from './cycle-summary.js';
@@ -43,12 +43,15 @@ const DEFAULT_REVIEWERS = Object.freeze(['correctness', 'tests', 'maintainabilit
  * Cycle record produced by `createReviewAssessmentAdapter().buildCycleRecord`.
  *
  * `reviewerIssueCount` is the pre-synthesis aggregate from raw reviewer outputs.
+ * `reviewerMinorIssueCount` carries minor reviewer notes that should not force
+ * another fix cycle.
  * `issueCount` (from synthesis) may differ when synthesis collapses or expands
  * findings. Both are reported so consumers can see how synthesis adjusted them.
  *
  * @typedef {CycleRecordBase & {
  *   reviewers?: Array<AssessmentCycleProviderOutput & { role: string }>,
  *   reviewerIssueCount?: number,
+ *   reviewerMinorIssueCount?: number,
  * }} ReviewCycleRecord
  */
 
@@ -137,7 +140,7 @@ function createReviewAssessmentAdapter({ objective, reviewers }) {
             ...parseReviewSummary(text),
           }),
           logOutput: ({ provider, item: role, output }) => {
-            runContext.logger.info(`${provider.id}/${role}: ${output.score} (${formatIssueCount(output.issueCount)}) - ${output.synopsis}`);
+            runContext.logger.info(`${provider.id}/${role}: ${output.score} (${formatIssueCounts(output)}) - ${output.synopsis}`);
           },
         },
       };
@@ -148,16 +151,24 @@ function createReviewAssessmentAdapter({ objective, reviewers }) {
         itemName: 'role',
         label: (output) => output.role,
       });
-      return {
+      /** @type {Record<string, unknown>} */
+      const result = {
         ...summary,
         reviewerIssueCount: summary.issueCount,
       };
+      if (summary.minorIssueCount > 0) result.reviewerMinorIssueCount = summary.minorIssueCount;
+      return result;
     },
     summarizeSynthesis({ outputSummary, synthesisText }) {
-      return {
+      /** @type {Record<string, unknown>} */
+      const result = {
         ...parseReviewSummary(synthesisText),
         reviewerIssueCount: outputSummary.reviewerIssueCount,
       };
+      if (outputSummary.reviewerMinorIssueCount > 0) {
+        result.reviewerMinorIssueCount = outputSummary.reviewerMinorIssueCount;
+      }
+      return result;
     },
     buildSynthesisPrompt({ context, cycle, outputs }) {
       return buildReviewSynthesisPrompt({
@@ -192,7 +203,7 @@ function createReviewAssessmentAdapter({ objective, reviewers }) {
     },
     afterCycle({ runContext, cycle, cycleRecord }) {
       if (runContext.options.fix) {
-        runContext.logger.info(`cycle ${cycle} score: ${cycleRecord.score} (${formatIssueCount(cycleRecord.issueCount)})`);
+        runContext.logger.info(`cycle ${cycle} score: ${cycleRecord.score} (${formatIssueCounts(cycleRecord)})`);
         runContext.logger.info(`cycle ${cycle} synopsis: ${cycleRecord.synopsis}`);
       }
     },

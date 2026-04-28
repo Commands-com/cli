@@ -14,7 +14,7 @@ import {
   completeAssessmentCommandRun,
 } from './assessment-completion.js';
 import {
-  formatIssueCount,
+  formatIssueCounts,
   parseQualitySummary,
   summarizeScoredOutputs,
 } from './cycle-summary.js';
@@ -46,6 +46,8 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
  * Cycle record produced by `createQualityAssessmentAdapter().buildCycleRecord`.
  *
  * `providerIssueCount` is the pre-synthesis aggregate from raw provider outputs.
+ * `providerMinorIssueCount` carries minor provider notes that should not force
+ * another fix cycle.
  * `issueCount` (inherited from `cycleSummary`) is the post-synthesis count, which
  * may collapse or expand the provider total. Both are reported so consumers can
  * see how synthesis adjusted findings.
@@ -53,6 +55,7 @@ const DEFAULT_AREAS = Object.freeze(['architecture', 'correctness', 'maintainabi
  * @typedef {CycleRecordBase & {
  *   outputs?: Array<AssessmentCycleProviderOutput>,
  *   providerIssueCount?: number,
+ *   providerMinorIssueCount?: number,
  * }} QualityCycleRecord
  */
 
@@ -159,7 +162,7 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
             ...parseQualitySummary(text),
           }),
           logOutput: ({ provider, output }) => {
-            runContext.logger.info(`${provider.id}/${output.area}: ${output.score} (${formatIssueCount(output.issueCount)}) - ${output.synopsis}`);
+            runContext.logger.info(`${provider.id}/${output.area}: ${output.score} (${formatIssueCounts(output)}) - ${output.synopsis}`);
           },
         },
       };
@@ -185,7 +188,7 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
       synthesisText,
       synthesisError,
     }) {
-      return {
+      const record = {
         ...cycleSummary,
         providerIssueCount: outputSummary.issueCount,
         synthesisProvider,
@@ -193,6 +196,10 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
         synthesisError,
         outputs,
       };
+      if (outputSummary.minorIssueCount > 0) {
+        record.providerMinorIssueCount = outputSummary.minorIssueCount;
+      }
+      return record;
     },
     formatOutputs(outputs) {
       return formatQualityAssessmentOutputs(outputs);
@@ -204,7 +211,7 @@ function createQualityAssessmentAdapter({ areas, descriptors }) {
     },
     afterCycle({ runContext, cycle, cycleRecord }) {
       if (runContext.options.fix) {
-        runContext.logger.info(`cycle ${cycle} score: ${cycleRecord.score} (${formatIssueCount(cycleRecord.issueCount)})`);
+        runContext.logger.info(`cycle ${cycle} score: ${cycleRecord.score} (${formatIssueCounts(cycleRecord)})`);
         runContext.logger.info(`cycle ${cycle} synopsis: ${cycleRecord.synopsis}`);
       }
     },

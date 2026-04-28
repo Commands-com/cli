@@ -1,7 +1,8 @@
 import { artifactPath, markdownArtifactPath } from './artifact-paths.js';
 import {
-  formatIssueCount,
+  formatIssueCounts,
   normalizedCycleIssueCount,
+  normalizedCycleMinorIssueCount,
   normalizedCycleScore,
 } from './cycle-summary.js';
 
@@ -70,7 +71,9 @@ function buildAssessmentFinalSummary(state, {
   const firstCycle = cycles[0] || {};
   const lastCycle = finalCycle || cycles[cycles.length - 1] || {};
   const finalIssueCount = normalizedCycleIssueCount(lastCycle);
+  const finalMinorIssueCount = normalizedCycleMinorIssueCount(lastCycle);
   const initialIssueCount = normalizedCycleIssueCount(firstCycle);
+  const initialMinorIssueCount = normalizedCycleMinorIssueCount(firstCycle);
   const finalFanoutFailures = Array.isArray(lastCycle.fanoutFailures)
     ? lastCycle.fanoutFailures.map(({ provider, item, error }) => ({ provider, item, error }))
     : [];
@@ -88,15 +91,18 @@ function buildAssessmentFinalSummary(state, {
     initial: {
       score: normalizedCycleScore(firstCycle),
       issueCount: initialIssueCount,
+      minorIssueCount: initialMinorIssueCount,
     },
     final: {
       score: normalizedCycleScore(lastCycle),
       issueCount: finalIssueCount,
+      minorIssueCount: finalMinorIssueCount,
       synopsis: lastCycle.synopsis || '',
       fanoutFailureCount: finalFanoutFailures.length,
       fanoutFailures: finalFanoutFailures,
     },
     issueDelta: initialIssueCount - finalIssueCount,
+    minorIssueDelta: initialMinorIssueCount - finalMinorIssueCount,
     hasUnresolvedTestFailure: Boolean(state.hasUnresolvedTestFailure),
     stopReason: state.stopReason || '',
     reportPath,
@@ -113,7 +119,8 @@ function formatAssessmentFinalReport(summary) {
     summary.targetScore ? `Target: ${summary.targetScore}` : '',
     scoreLine('Initial', summary.initial),
     scoreLine('Final', summary.final),
-    `Issue delta: ${formatDelta(summary.issueDelta)}`,
+    `Major issue delta: ${formatDelta(summary.issueDelta)}`,
+    `Minor issue delta: ${formatDelta(summary.minorIssueDelta)}`,
     `Providers: ${summary.providers.join(', ') || '(none)'}`,
     summary.stopReason ? `Stop reason: ${summary.stopReason}` : '',
     summary.hasUnresolvedTestFailure ? 'Validation: unresolved failure' : 'Validation: clear',
@@ -126,7 +133,7 @@ function formatAssessmentFinalReport(summary) {
 
 function scoreLine(label, value) {
   const score = value?.score ? `${value.score} ` : '';
-  return `${label}: ${score}(${formatIssueCount(normalizedCycleIssueCount(value))})`;
+  return `${label}: ${score}(${formatIssueCounts(value)})`;
 }
 
 function formatDelta(value) {

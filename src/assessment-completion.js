@@ -2,8 +2,9 @@ import { markdownArtifactPath } from './artifact-paths.js';
 import { finalCycleWithDefaults } from './assessment-report.js';
 import { completeCommandRun } from './command-result.js';
 import {
-  formatIssueCount,
+  formatIssueCounts,
   normalizedCycleIssueCount,
+  normalizedCycleMinorIssueCount,
   normalizedCycleScore,
   scoreIsWorseThanTarget,
 } from './cycle-summary.js';
@@ -69,11 +70,13 @@ import { writeAssessmentFinalReport } from './assessment-final-report.js';
  * Loose default-cycle shape used by `completionFinalCycle` to absorb the
  * frozen `DEFAULT_QUALITY_FINAL_CYCLE` / `DEFAULT_REVIEW_FINAL_CYCLE`
  * literals (which carry readonly arrays). Only `score`, `issueCount`,
- * and `synopsis` are read downstream via `finalCycleWithDefaults`.
+ * `minorIssueCount`, and `synopsis` are read downstream via
+ * `finalCycleWithDefaults`.
  *
  * @typedef {object} AssessmentFinalCycleFallback
  * @property {string} [score]
  * @property {number} [issueCount]
+ * @property {number} [minorIssueCount]
  * @property {string} [synopsis]
  */
 
@@ -120,12 +123,14 @@ export function buildAssessmentCompletionPayload({
 }) {
   const fields = assessmentCompletionFields(state, reportPath);
   const selectedFinalCycle = completionFinalCycle(state, finalCycle, fallbackCycle);
+  const minorIssueCount = normalizedCycleMinorIssueCount(selectedFinalCycle);
   return {
     type,
     ...fields,
     ...(extra || {}),
     score: selectedFinalCycle.score,
     issueCount: selectedFinalCycle.issueCount,
+    ...(minorIssueCount > 0 ? { minorIssueCount } : {}),
     synopsis: selectedFinalCycle.synopsis,
   };
 }
@@ -164,8 +169,10 @@ export async function completeAssessmentCommandRun({
     onText: (textLogger) => {
       const finalScore = normalizedCycleScore(finalCycle);
       const finalIssueCount = normalizedCycleIssueCount(finalCycle);
-      textLogger.info(`final: ${finalScore} (${formatIssueCount(finalIssueCount)}) after ${state.cycles.length} cycle(s)`);
-      textLogger.info(`score: ${finalScore} (${formatIssueCount(finalIssueCount)})`);
+      const finalMinorIssueCount = normalizedCycleMinorIssueCount(finalCycle);
+      const finalIssueCounts = formatIssueCounts(finalIssueCount, finalMinorIssueCount);
+      textLogger.info(`final: ${finalScore} (${finalIssueCounts}) after ${state.cycles.length} cycle(s)`);
+      textLogger.info(`score: ${finalScore} (${finalIssueCounts})`);
       textLogger.info(`synopsis: ${finalCycle.synopsis}`);
       if (finalState.missedUntilTarget) {
         textLogger.info(`until: target ${state.options.untilScore} was not reached within ${state.options.maxCycles} cycle(s)`);
