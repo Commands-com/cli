@@ -176,7 +176,6 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @typedef {Object} CycleRecorder
  * @property {string} priorFindings Current findings carried into the next cycle.
  * @property {(cycle: number, details?: Object, options?: { priorFindings?: string }) => CycleRecord} beginCycle
- * @property {(nextContext: CycleRepoContext) => CycleRepoContext} setContext
  * @property {(cycleRecord: CycleRecord, implementationResult: CycleImplementationApplicationResult, options?: { testFailureUpdates?: Object }) => CycleRecord} applyImplementationResult
  */
 
@@ -270,9 +269,6 @@ export function createCycleRecorder(state) {
     },
     beginCycle(cycle, details = {}, options = {}) {
       return beginCycle(state, cycle, details, options);
-    },
-    setContext(nextContext) {
-      return setContext(state, nextContext);
     },
     applyImplementationResult(cycleRecord, implementationResult = {}, options = {}) {
       return applyImplementationResult(state, cycleRecord, implementationResult, options);

@@ -261,7 +261,7 @@ export async function runCycleWorkflow(parsed, {
     finalStatus = 'failed';
     throw error;
   } finally {
-    await finalizeWorktree(workspace, { keepWorktree: options.keepWorktree });
+    await finalizeWorktree(workspace, { keepWorktree: options.keepWorktree, logger: state.logger });
     await writeRunState(state, { status: finalStatus, error: failure });
   }
 

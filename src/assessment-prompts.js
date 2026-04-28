@@ -20,7 +20,7 @@ const CURRENT_CODEBASE_SCOPE_GUIDANCE = 'Judge the current codebase, not hypothe
 const SCORE_RUBRIC_GUIDANCE = [
   'Calibrate severity strictly: A means no high-leverage actionable issues remain; B means healthy code with a few meaningful non-urgent improvements; C means moderate repeated change cost; D means serious near-term risk; F means validation is red, behavior is broken, data can be lost, security is compromised, or the code is very hard to change.',
   'Do not grade aspirational improvements, optional coverage, large tests, or minor duplication as D/F unless they create concrete near-term change risk.',
-  'A healthy validated codebase with minor cleanup items should score A or B, not C/D/F.',
+  'if only minor cleanup and incremental hardening remain then grade it an A',
 ].join(' ');
 const CODE_REDUCTION_GUIDANCE = 'More broadly, prefer deleting code, collapsing paths, and reducing concepts over introducing new abstractions.';
 const TEST_COST_GUIDANCE = [

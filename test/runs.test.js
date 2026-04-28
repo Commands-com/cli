@@ -424,6 +424,36 @@ test('showRun still rejects ids whose run dir does not exist', async () => {
   }
 });
 
+test('showRun skips symlink entries instead of following or listing them', async () => {
+  const cwd = await tempDir();
+  try {
+    const { store } = await prepareRun(cwd, {
+      kind: 'review',
+      label: 'symlink run',
+      writeSetupArtifacts: false,
+    });
+    await store.writeJson('metadata.json', { kind: 'review', provider: 'mock' });
+    await store.write('real.md', '# Real');
+
+    const outsideDir = await tempDir();
+    try {
+      const outsideFile = path.join(outsideDir, 'outside.md');
+      await fs.writeFile(outsideFile, '# Outside', 'utf8');
+      await fs.symlink(outsideFile, path.join(store.dir, 'linked.md'));
+
+      const shown = (await runRunsJson(cwd, ['show', store.runId])).run;
+
+      assert.ok(shown.files.includes('real.md'));
+      assert.ok(!shown.files.includes('linked.md'));
+      assert.ok(!shown.files.some((file) => file.startsWith('linked.md/')));
+    } finally {
+      await fs.rm(outsideDir, { recursive: true, force: true });
+    }
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('showRun surfaces unreadable metadata.json without leaking a raw EISDIR error', async () => {
   const cwd = await tempDir();
   try {

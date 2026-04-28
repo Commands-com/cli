@@ -6,7 +6,8 @@ import {
   runSynthesisWithFallback,
 } from '../src/cycle-synthesis.js';
 import { runCycleWorkflow } from '../src/cycle-workflow.js';
-import { runShell, scopedWorktreeCwd } from '../src/workflow.js';
+import { createIsolatedWorktree } from '../src/git.js';
+import { finalizeWorktree, runShell, scopedWorktreeCwd } from '../src/workflow.js';
 import { initGitRepo, run, tempDir } from './support/cli.js';
 
 function shellQuote(value) {
@@ -33,6 +34,16 @@ const silentLogger = Object.freeze({
   warn() {},
   error() {},
 });
+
+function captureLogger() {
+  const lines = [];
+  return {
+    lines,
+    info(message) { lines.push({ level: 'info', message: String(message) }); },
+    warn(message) { lines.push({ level: 'warn', message: String(message) }); },
+    error(message) { lines.push({ level: 'error', message: String(message) }); },
+  };
+}
 
 test('runShell resolves timeout results without rejecting', { skip: process.platform === 'win32' }, async () => {
   const result = await runShell(
@@ -222,6 +233,93 @@ test('runCycleWorkflow prunes unchanged isolated worktrees when cycle execution 
     const listed = await run('git', ['worktree', 'list', '--porcelain'], cwd);
     assert.doesNotMatch(listed.stdout, /\.commands-com\/worktrees/);
   } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('runCycleWorkflow forwards run logger so retained worktrees emit a user-visible notice', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const cwd = await tempDir('commands-com-workflow-');
+  /** @type {any} */
+  let workspace;
+  try {
+    await initGitRepo(cwd);
+    const logger = captureLogger();
+
+    await runCycleWorkflow({
+      positionals: [],
+      flags: new Map([
+        ['provider', 'mock'],
+        ['worktree', 'true'],
+        ['max-cycles', '1'],
+      ]),
+    }, {
+      cwd,
+      kind: 'review',
+      label: 'retention notice',
+      logger,
+      adapter: {},
+      dependencies: {
+        runAssessmentCycles: async (state) => {
+          workspace = state.workspace;
+          await fs.writeFile(path.join(state.workspace.path, 'fix-output.txt'), 'pretend fix output\n', 'utf8');
+        },
+      },
+    });
+
+    assert.ok(workspace);
+    assert.equal(workspace.mode, 'worktree');
+    const notice = logger.lines.find(
+      (line) => line.level === 'info'
+        && line.message.includes('worktree retained')
+        && line.message.includes(workspace.path),
+    );
+    assert.ok(notice, `expected retention notice from runCycleWorkflow, got ${JSON.stringify(logger.lines)}`);
+    const stat = await fs.stat(workspace.path);
+    assert.ok(stat.isDirectory(), 'worktree directory should still exist on disk');
+  } finally {
+    if (workspace?.path) {
+      try {
+        await run('git', ['worktree', 'remove', '--force', workspace.path], cwd);
+      } catch (_) { /* best-effort cleanup */ }
+    }
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('finalizeWorktree retains worktree with uncommitted changes and logs a notice', {
+  skip: process.platform === 'win32',
+}, async () => {
+  const cwd = await tempDir('commands-com-workflow-');
+  /** @type {any} */
+  let workspace;
+  try {
+    await initGitRepo(cwd);
+    const isolated = await createIsolatedWorktree(cwd, { kind: 'review', label: 'retention' });
+    await fs.writeFile(path.join(isolated.path, 'fix-output.txt'), 'pretend fix output\n', 'utf8');
+
+    workspace = { mode: 'worktree', cwd: isolated.path, ...isolated };
+    const logger = captureLogger();
+
+    await finalizeWorktree(workspace, { keepWorktree: false, logger });
+
+    assert.equal(workspace.prune.skipped, true);
+    assert.equal(workspace.prune.reason, 'worktree_has_changes');
+    const stat = await fs.stat(workspace.path);
+    assert.ok(stat.isDirectory(), 'worktree directory should still exist on disk');
+    const notice = logger.lines.find(
+      (line) => line.level === 'info'
+        && line.message.includes('worktree retained')
+        && line.message.includes(workspace.path),
+    );
+    assert.ok(notice, `expected retention notice, got ${JSON.stringify(logger.lines)}`);
+  } finally {
+    if (workspace?.path) {
+      try {
+        await run('git', ['worktree', 'remove', '--force', workspace.path], cwd);
+      } catch (_) { /* best-effort cleanup */ }
+    }
     await fs.rm(cwd, { recursive: true, force: true });
   }
 });

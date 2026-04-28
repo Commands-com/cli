@@ -28,7 +28,11 @@ export function extractGenericProviderSessionId(stdout) {
   const trimmed = outputString(stdout).trim();
   if (!trimmed) return '';
 
-  const candidates = [trimmed, ...trimmed.split(/\r?\n/).map((line) => line.trim()).reverse()];
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim());
+  const candidates = [trimmed];
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i] && lines[i] !== trimmed) candidates.push(lines[i]);
+  }
   for (const candidate of candidates) {
     if (!candidate) continue;
     let parsed;

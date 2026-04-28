@@ -131,6 +131,24 @@ function skippedWorktreePrune(reason) {
 }
 
 /**
+ * Decide whether the isolated worktree should be pruned at finalize time.
+ *
+ * Skip reasons:
+ *   - `keep_worktree` — explicit user opt-out via `--keep-worktree`.
+ *   - `diff_status_failed` — defensive skip when we cannot trust the diff
+ *     snapshot (e.g. git invocation failure); we never prune a worktree we
+ *     cannot prove is clean.
+ *   - `worktree_has_changes` — the worktree has uncommitted modifications
+ *     relative to its base ref. This is the **post-fix happy path**, not an
+ *     error: after a successful `--fix` cycle the implementer leaves edits on
+ *     disk for the user to inspect / commit. Prune is skipped so the user
+ *     does not lose work. Callers that want the user to understand the
+ *     surviving worktree should pair this skip reason with a user-facing
+ *     notice (see `finalizeWorktree`).
+ *
+ * `shouldPrune: true` is only returned when the worktree is provably clean
+ * against its base ref.
+ *
  * @param {{ keepWorktree?: boolean, diffStatus?: WorktreeDiffStatus }} args
  * @returns {WorktreePruneDecision}
  */
@@ -149,10 +167,10 @@ function resolveWorktreePruneDecision({ keepWorktree, diffStatus }) {
 
 /**
  * @param {FinalizeWorkspace} workspace
- * @param {{ keepWorktree?: boolean }} options
+ * @param {{ keepWorktree?: boolean, logger?: import('./cycle-state.js').CycleLogger }} options
  * @returns {Promise<FinalizeWorkspace>}
  */
-export async function finalizeWorktree(workspace, { keepWorktree }) {
+export async function finalizeWorktree(workspace, { keepWorktree, logger } = {}) {
   if (workspace.mode !== WORKSPACE_MODES.WORKTREE) return workspace;
   const diffStatus = await getWorktreeDiffStatus(workspace.cwd, workspace.baseSha || workspace.baseRef || 'HEAD');
   workspace.diffStatus = diffStatus;
@@ -161,6 +179,14 @@ export async function finalizeWorktree(workspace, { keepWorktree }) {
     workspace.prune = await pruneIsolatedWorktree(workspace);
   } else {
     workspace.prune = pruneDecision.prune;
+    if (
+      !keepWorktree
+      && pruneDecision.prune?.reason === 'worktree_has_changes'
+      && typeof logger?.info === 'function'
+    ) {
+      const worktreePath = workspace.path || workspace.cwd;
+      logger.info(`worktree retained (uncommitted changes detected): ${worktreePath}`);
+    }
   }
   return workspace;
 }

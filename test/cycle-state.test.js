@@ -130,7 +130,6 @@ test('createCycleRecorder applies mutation methods', () => {
     'applyImplementationResult',
     'beginCycle',
     'priorFindings',
-    'setContext',
   ]);
   assert.equal(state.cycles[0], cycleRecord);
   assert.equal(state.priorFindings, 'next findings');

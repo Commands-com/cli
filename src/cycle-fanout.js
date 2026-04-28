@@ -62,10 +62,8 @@ export function createAssessmentFanoutItems(items, options = {}) {
 }
 
 function buildAssessmentFanoutJobs({ providers, items }) {
-  return providers.flatMap((provider) => items.map((item, itemIndex) => ({
-    provider,
-    item: toAssessmentFanoutItem(item, itemIndex),
-  })));
+  const jobItems = items.map((item, itemIndex) => toAssessmentFanoutItem(item, itemIndex));
+  return providers.flatMap((provider) => jobItems.map((item) => ({ provider, item })));
 }
 
 function normalizeAssessmentFanoutOptions(options = {}) {

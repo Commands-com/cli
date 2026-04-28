@@ -41,6 +41,7 @@ async function readShowRunFiles(dir, cap) {
     const entries = await fs.readdir(absolute, { withFileTypes: true });
     for (const entry of entries) {
       const childRelative = relative ? path.join(relative, entry.name) : entry.name;
+      if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
         files.push(childRelative);
         await walk(path.join(absolute, entry.name), childRelative);
