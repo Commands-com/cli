@@ -225,27 +225,6 @@ test('final summary handles zero-cycle runs explicitly', async () => {
   assert.match(report.finalReport, /Final: \(0 issues\)/);
 });
 
-test('assessment completion requires command-specific final issue semantics', async () => {
-  const cycle = {
-    score: 'A',
-    issueCount: 0,
-    synopsis: 'Clean assessment.',
-  };
-  const state = assessmentState({ kind: 'quality', cycle });
-
-  await assert.rejects(
-    () => completeAssessment(state, { hasFinalIssues: undefined }),
-    /requires hasFinalIssues/,
-  );
-  await assert.rejects(
-    () => writeAssessmentFinalReport(state, {
-      finalCycle: cycle,
-      reportPath: '/runs/code-quality.md',
-    }),
-    /requires finalState/,
-  );
-});
-
 test('completeAssessmentCommandRun passes when until target score is met with remaining issues', async () => {
   const cycle = {
     score: 'B',

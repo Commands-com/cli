@@ -10,7 +10,7 @@ import {
 } from './assessment-report.js';
 import {
   assessmentNeedsImplementation,
-  buildQualityCompletionPayload,
+  buildAssessmentCompletionPayload,
   completeAssessmentCommandRun,
 } from './assessment-completion.js';
 import {
@@ -91,7 +91,17 @@ export async function runQualityCommand(parsed, { cwd, logger = createCommandLog
       Array.isArray(cycles) ? cycles.at(-1) : undefined,
       DEFAULT_QUALITY_FINAL_CYCLE,
     ),
-    buildCompletionPayload: buildQualityCompletionPayload,
+    buildCompletionPayload: ({ state: completionState, reportPath, finalCycle }) => buildAssessmentCompletionPayload({
+      state: completionState,
+      reportPath,
+      finalCycle,
+      type: 'quality.completed',
+      fallbackCycle: DEFAULT_QUALITY_FINAL_CYCLE,
+      extra: {
+        provider: completionState.options.primaryProvider.id,
+        outputs: finalCycle.outputs,
+      },
+    }),
     hasFinalIssues: qualityHasFinalIssues,
   });
 }

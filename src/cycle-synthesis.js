@@ -19,9 +19,8 @@ import { providerFallbackChain, runWithProviderFallback } from './provider-fallb
  */
 
 /**
- * Explicit dependency object consumed by synthesis. Built by
- * `createCyclePhaseView`; phase modules read provider/model/timeout fields off
- * `options` directly.
+ * Explicit dependency object consumed by synthesis. Phase modules read
+ * provider/model/timeout fields off `options` directly.
  *
  * @typedef {Object} CycleSynthesisDependencies
  * @property {CycleRepoContext} context Repository context for provider cwd.

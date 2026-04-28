@@ -20,7 +20,6 @@ import {
   runImplementationAndValidationPhase,
 } from '../src/cycle-implementation.js';
 import {
-  createCyclePhaseView,
   createCycleState,
 } from '../src/cycle-state.js';
 import { runSynthesisWithFallback } from '../src/cycle-synthesis.js';
@@ -280,7 +279,7 @@ test('cycle fan-out writes normalized prompt and output artifacts through the ar
   const state = cycleState({ store });
   const mirroredPaths = [];
 
-  const { outputs } = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: '002',
     ...cycleArtifactOptions(),
     items: [
@@ -312,10 +311,10 @@ test('cycle fan-out writes normalized prompt and output artifacts through the ar
 
 test('cycle synthesis writes normalized prompt, result, and fallback error artifacts', async () => {
   const successStore = memoryStore();
-  const success = await runSynthesisWithFallback(createCyclePhaseView(cycleState({
+  const success = await runSynthesisWithFallback(cycleState({
     store: successStore,
     providers: [{ id: 'mock' }],
-  })), {
+  }), {
     cycle: '003',
     prompt: '<!-- commands-com-prompt-intent: {"kind":"review-synthesis","synthesisIssueCount":0} -->',
     fallbackDescription: 'reviewer summaries',
@@ -329,10 +328,10 @@ test('cycle synthesis writes normalized prompt, result, and fallback error artif
   ]);
 
   const failureStore = memoryStore();
-  const failure = await runSynthesisWithFallback(createCyclePhaseView(cycleState({
+  const failure = await runSynthesisWithFallback(cycleState({
     store: failureStore,
     providers: [{ id: 'Unsupported Provider/CLI' }],
-  })), {
+  }), {
     cycle: '003',
     prompt: 'Synthesize provider outputs.',
     fallbackDescription: 'provider outputs',
@@ -361,7 +360,7 @@ test('implementation validation writes normalized planner, implementer, test, an
       },
     });
 
-    await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+    await runImplementationAndValidationPhase(state, {
       cycle: '005',
       objective: 'Normalize validation artifacts',
       findings: 'Finding text.',

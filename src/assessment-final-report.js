@@ -19,30 +19,26 @@ import {
  */
 
 /**
- * Inputs for `writeAssessmentFinalReport`. `finalState` is structurally
- * optional so the destructure-with-default pattern type-checks; the runtime
- * `assertAssessmentFinalState` enforces that callers actually supply it.
+ * Inputs for `writeAssessmentFinalReport`.
  *
  * @typedef {object} WriteAssessmentFinalReportOptions
  * @property {AssessmentFinalCycle} [finalCycle] Final cycle summary (defaults to last cycle).
- * @property {AssessmentFinalState} [finalState] Terminal disposition; required at runtime.
+ * @property {AssessmentFinalState} finalState Terminal disposition.
  * @property {string} [reportPath] Path to the detailed report, surfaced in the final summary.
  */
 
 /**
  * @param {CycleState} state
- * @param {WriteAssessmentFinalReportOptions} [options]
+ * @param {WriteAssessmentFinalReportOptions} options
  */
 export async function writeAssessmentFinalReport(state, {
   finalCycle,
   finalState,
   reportPath,
-} = {}) {
-  const validatedFinalState = assertAssessmentFinalState(finalState);
-
+}) {
   const summary = buildAssessmentFinalSummary(state, {
     finalCycle,
-    finalState: validatedFinalState,
+    finalState,
     reportPath,
   });
   const finalReport = formatAssessmentFinalReport(summary);
@@ -141,15 +137,4 @@ function formatDelta(value) {
 function title(kind) {
   const text = String(kind || 'Assessment');
   return `${text.slice(0, 1).toUpperCase()}${text.slice(1)}`;
-}
-
-/**
- * @param {AssessmentFinalState | undefined} finalState
- * @returns {AssessmentFinalState}
- */
-function assertAssessmentFinalState(finalState) {
-  if (!finalState || typeof finalState.status !== 'string' || finalState.status.length === 0) {
-    throw new Error('writeAssessmentFinalReport requires finalState');
-  }
-  return finalState;
 }

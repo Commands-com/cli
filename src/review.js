@@ -7,7 +7,7 @@ import {
 } from './assessment-report.js';
 import {
   assessmentNeedsImplementation,
-  buildReviewCompletionPayload,
+  buildAssessmentCompletionPayload,
   completeAssessmentCommandRun,
 } from './assessment-completion.js';
 import { metadataListOption, readResumeMetadata } from './resume-metadata.js';
@@ -96,7 +96,11 @@ export async function runReviewCommand(parsed, { cwd, logger = createCommandLogg
       Array.isArray(cycles) ? cycles.at(-1) : undefined,
       DEFAULT_REVIEW_FINAL_CYCLE,
     ),
-    buildCompletionPayload: buildReviewCompletionPayload,
+    buildCompletionPayload: (args) => buildAssessmentCompletionPayload({
+      ...args,
+      type: 'review.completed',
+      fallbackCycle: DEFAULT_REVIEW_FINAL_CYCLE,
+    }),
     hasFinalIssues: reviewHasFinalIssues,
   });
 }

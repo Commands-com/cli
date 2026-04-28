@@ -1,11 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  buildQualityCompletionPayload,
-  buildReviewCompletionPayload,
-} from '../src/assessment-completion.js';
+import { buildAssessmentCompletionPayload } from '../src/assessment-completion.js';
 import {
   DEFAULT_QUALITY_FINAL_CYCLE,
+  DEFAULT_REVIEW_FINAL_CYCLE,
   finalCycleWithDefaults,
   formatQualityReport,
   formatReviewReport,
@@ -140,7 +138,12 @@ test('formatReviewReport preserves cycle ordering, implementation sections, test
     'Merge manually from branch: `commands/fix-parser`',
   ].join('\n'));
 
-  assert.deepEqual(buildReviewCompletionPayload({ state, reportPath: '/runs/review-cycle.md' }), {
+  assert.deepEqual(buildAssessmentCompletionPayload({
+    state,
+    reportPath: '/runs/review-cycle.md',
+    type: 'review.completed',
+    fallbackCycle: DEFAULT_REVIEW_FINAL_CYCLE,
+  }), {
     type: 'review.completed',
     runId: 'run-review',
     reportPath: '/runs/review-cycle.md',
@@ -227,10 +230,16 @@ test('formatQualityReport preserves summary, synthesis, provider output, impleme
     '',
   ].join('\n'));
 
-  assert.deepEqual(buildQualityCompletionPayload({
+  assert.deepEqual(buildAssessmentCompletionPayload({
     state,
     reportPath: '/runs/code-quality.md',
     finalCycle,
+    type: 'quality.completed',
+    fallbackCycle: DEFAULT_QUALITY_FINAL_CYCLE,
+    extra: {
+      provider: 'gemini',
+      outputs: state.cycles[0].outputs,
+    },
   }), {
     type: 'quality.completed',
     runId: 'run-quality',
@@ -336,10 +345,16 @@ test('quality report helpers preserve empty-cycle fallback payload and report be
   assert.equal(finalCycle.synopsis, 'No quality audit outputs were produced.');
   assert.equal(qualityHasFinalIssues(state, finalCycle), false);
   assert.match(formatQualityReport(state, { finalCycle }), /Score: A/);
-  assert.deepEqual(buildQualityCompletionPayload({
+  assert.deepEqual(buildAssessmentCompletionPayload({
     state,
     reportPath: '/runs/code-quality.md',
     finalCycle,
+    type: 'quality.completed',
+    fallbackCycle: DEFAULT_QUALITY_FINAL_CYCLE,
+    extra: {
+      provider: 'codex',
+      outputs: finalCycle.outputs,
+    },
   }), {
     type: 'quality.completed',
     runId: 'run-empty-quality',

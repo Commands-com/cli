@@ -72,11 +72,13 @@ export const RUN_ID_PATTERN = /^\d{8}-\d{6}-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-[a-f
  */
 
 /**
- * Result returned by `prepareRun`.
+ * Result returned by `prepareRun`. `context` is `null` when the caller passes
+ * `collectContext: false` and takes responsibility for collecting context
+ * itself (worktree workflows do this against the worktree path).
  *
  * @typedef {Object} PreparedRun
  * @property {RunStore} store Artifact store for this run.
- * @property {import('./git.js').RepoContext} context Repository context captured at run start.
+ * @property {import('./git.js').RepoContext | null} context Repository context captured at run start, or `null` when context capture was opted out.
  */
 
 /**
@@ -297,6 +299,7 @@ async function assertRunDirectory(dir, displayRef) {
  *   changed?: boolean,
  *   metadata?: RunMetadata,
  *   writeSetupArtifacts?: boolean,
+ *   collectContext?: boolean,
  * }} options
  * @returns {Promise<PreparedRun>}
  */
@@ -306,6 +309,7 @@ export async function prepareRun(cwd, {
   changed = false,
   metadata = {},
   writeSetupArtifacts = true,
+  collectContext = true,
 }) {
   if (typeof kind !== 'string' || kind.trim() === '') {
     throw new Error('prepareRun: kind must be a non-empty string');
@@ -313,9 +317,12 @@ export async function prepareRun(cwd, {
   if (typeof label !== 'string' || label.trim() === '') {
     throw new Error('prepareRun: label must be a non-empty string');
   }
+  if (writeSetupArtifacts && !collectContext) {
+    throw new Error('prepareRun: writeSetupArtifacts requires collectContext');
+  }
   const store = await createRunStore(cwd, kind, label);
-  const context = await collectRepoContext(cwd, { changed });
-  if (writeSetupArtifacts) {
+  const context = collectContext ? await collectRepoContext(cwd, { changed }) : null;
+  if (writeSetupArtifacts && context) {
     await writeRunSetupArtifacts(store, context, metadata);
   }
   return { store, context };

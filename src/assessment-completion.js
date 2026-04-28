@@ -1,9 +1,5 @@
 import { markdownArtifactPath } from './artifact-paths.js';
-import {
-  DEFAULT_QUALITY_FINAL_CYCLE,
-  DEFAULT_REVIEW_FINAL_CYCLE,
-  finalCycleWithDefaults,
-} from './assessment-report.js';
+import { finalCycleWithDefaults } from './assessment-report.js';
 import { completeCommandRun } from './command-result.js';
 import {
   formatIssueCount,
@@ -33,20 +29,9 @@ import { writeAssessmentFinalReport } from './assessment-final-report.js';
  */
 
 /**
- * Inputs for `buildReviewCompletionPayload` / `buildQualityCompletionPayload`.
- * Fields are structurally optional so the destructure-with-default pattern
- * type-checks; adapter callers always supply real values.
- *
- * @typedef {object} CompletionPayloadInputs
- * @property {CycleState} [state]
- * @property {string} [reportPath]
- * @property {AssessmentFinalCycle} [finalCycle]
- */
-
-/**
  * Common payload fields produced by `assessmentCompletionFields` and shared
  * by review and quality completion payloads. Adapter-specific fields (e.g.
- * `provider`, `outputs`) are layered on top by the per-adapter builders.
+ * `provider`, `outputs`) are layered on top via the `extra` argument.
  *
  * @typedef {object} AssessmentCompletionFields
  * @property {string} runId
@@ -93,6 +78,21 @@ import { writeAssessmentFinalReport } from './assessment-final-report.js';
  */
 
 /**
+ * Inputs for `buildAssessmentCompletionPayload`. The merged builder shared
+ * by review and quality adapters; `type` is the literal payload `type`
+ * field, `fallbackCycle` is the per-adapter default cycle, and `extra`
+ * carries adapter-specific fields (e.g. quality's `provider`/`outputs`).
+ *
+ * @typedef {object} BuildAssessmentCompletionPayloadInputs
+ * @property {CycleState} state
+ * @property {string} reportPath
+ * @property {AssessmentFinalCycle} [finalCycle]
+ * @property {string} type
+ * @property {AssessmentFinalCycleFallback} fallbackCycle
+ * @property {Record<string, unknown>} [extra]
+ */
+
+/**
  * Inputs for `completeAssessmentCommandRun`. The callbacks let review and
  * quality share the same finalization shape while supplying their own
  * report formatter, final-cycle selector, and completion payload builder.
@@ -108,38 +108,25 @@ import { writeAssessmentFinalReport } from './assessment-final-report.js';
  */
 
 /**
- * @param {CompletionPayloadInputs} [args]
+ * @param {BuildAssessmentCompletionPayloadInputs} args
  */
-export function buildReviewCompletionPayload({ state, reportPath, finalCycle } = {}) {
-  const fields = assessmentCompletionFields(state, reportPath);
-  const selectedFinalCycle = completionFinalCycle(state, finalCycle, DEFAULT_REVIEW_FINAL_CYCLE);
-  return {
-    type: 'review.completed',
-    ...fields,
-    score: selectedFinalCycle.score,
-    issueCount: selectedFinalCycle.issueCount,
-    synopsis: selectedFinalCycle.synopsis,
-  };
-}
-
-/**
- * @param {CompletionPayloadInputs} args
- */
-export function buildQualityCompletionPayload({
+export function buildAssessmentCompletionPayload({
   state,
   reportPath,
   finalCycle,
+  type,
+  fallbackCycle,
+  extra,
 }) {
   const fields = assessmentCompletionFields(state, reportPath);
-  const selectedFinalCycle = completionFinalCycle(state, finalCycle, DEFAULT_QUALITY_FINAL_CYCLE);
+  const selectedFinalCycle = completionFinalCycle(state, finalCycle, fallbackCycle);
   return {
-    type: 'quality.completed',
+    type,
     ...fields,
-    provider: state.options.primaryProvider.id,
+    ...(extra || {}),
     score: selectedFinalCycle.score,
     issueCount: selectedFinalCycle.issueCount,
     synopsis: selectedFinalCycle.synopsis,
-    outputs: selectedFinalCycle.outputs,
   };
 }
 
@@ -155,8 +142,6 @@ export async function completeAssessmentCommandRun({
   buildCompletionPayload,
   hasFinalIssues,
 }) {
-  assertCommandIssuePredicate(hasFinalIssues);
-
   const finalCycle = selectFinalCycle(state.cycles);
   const report = formatReport(state, { ...formatReportOptions, finalCycle });
   const reportPath = await state.store.write(markdownArtifactPath(reportArtifactName), report);
@@ -194,13 +179,13 @@ export async function completeAssessmentCommandRun({
 /**
  * @param {CycleState} state
  * @param {AssessmentFinalCycle} finalCycle
- * @param {{ hasFinalIssues?: AssessmentIssuePredicate }} [options]
+ * @param {{ hasFinalIssues: AssessmentIssuePredicate }} options
  * @returns {AssessmentFinalState}
  */
-export function buildAssessmentFinalState(state, finalCycle, { hasFinalIssues } = {}) {
-  assertCommandIssuePredicate(hasFinalIssues);
-
-  const missedUntilTarget = assessmentMissedUntilTarget(state, finalCycle);
+export function buildAssessmentFinalState(state, finalCycle, { hasFinalIssues }) {
+  // Final-state resolution always runs after synthesis, so normalize the
+  // score from the final cycle rather than trusting any cached field.
+  const missedUntilTarget = missedUntilTargetForScore(state, normalizedCycleScore(finalCycle));
   const hasIssues = assessmentHasFinalIssues(state, finalCycle, { hasFinalIssues });
   return {
     hasIssues,
@@ -212,14 +197,15 @@ export function buildAssessmentFinalState(state, finalCycle, { hasFinalIssues } 
 /**
  * @param {CycleRunContext} runContext
  * @param {CycleRecord} cycleRecord
- * @param {{ hasFinalIssues?: AssessmentIssuePredicate }} [options]
+ * @param {{ hasFinalIssues: AssessmentIssuePredicate }} options
  * @returns {boolean}
  */
-export function assessmentNeedsImplementation(runContext, cycleRecord, { hasFinalIssues } = {}) {
-  assertCommandIssuePredicate(hasFinalIssues);
-
+export function assessmentNeedsImplementation(runContext, cycleRecord, { hasFinalIssues }) {
   if (runContext.options?.untilScore) {
-    return assessmentCycleRecordMissedUntilTarget(runContext, cycleRecord)
+    // Cycle records carry the normalized score before this stop check;
+    // the fallback covers minimal unit records without one.
+    const cycleScore = cycleRecord?.score || normalizedCycleScore(cycleRecord);
+    return missedUntilTargetForScore(runContext, cycleScore)
       || Boolean(runContext.hasUnresolvedTestFailure);
   }
   return Boolean(hasFinalIssues(runContext, cycleRecord));
@@ -238,18 +224,9 @@ function assessmentHasFinalIssues(state, finalCycle, { hasFinalIssues }) {
   if (state.options?.untilScore) {
     // Score-target runs define success by the requested normalized score.
     // Remaining issue count is already reflected in normalizedCycleScore.
-    return assessmentMissedUntilTarget(state, finalCycle);
+    return missedUntilTargetForScore(state, normalizedCycleScore(finalCycle));
   }
   return Boolean(hasFinalIssues(state, finalCycle));
-}
-
-/**
- * @param {AssessmentIssuePredicate | undefined} hasFinalIssues
- */
-function assertCommandIssuePredicate(hasFinalIssues) {
-  if (typeof hasFinalIssues !== 'function') {
-    throw new Error('completeAssessmentCommandRun requires hasFinalIssues');
-  }
 }
 
 /**
@@ -265,25 +242,12 @@ function assessmentFinalStatus(state, hasIssues) {
 
 /**
  * @param {CycleState | CycleRunContext} state
- * @param {AssessmentFinalCycle | CycleRecord | undefined} finalCycle
+ * @param {string} score
  * @returns {boolean}
  */
-function assessmentMissedUntilTarget(state, finalCycle) {
+function missedUntilTargetForScore(state, score) {
   return Boolean(state.options?.untilScore)
-    && scoreIsWorseThanTarget(normalizedCycleScore(finalCycle), state.options.untilScore);
-}
-
-/**
- * @param {CycleRunContext} runContext
- * @param {CycleRecord} cycleRecord
- * @returns {boolean}
- */
-function assessmentCycleRecordMissedUntilTarget(runContext, cycleRecord) {
-  // Assessment adapters store the normalized score on cycle records before
-  // this stop check; the fallback covers minimal unit records without score.
-  const cycleScore = cycleRecord?.score || normalizedCycleScore(cycleRecord);
-  return Boolean(runContext.options?.untilScore)
-    && scoreIsWorseThanTarget(cycleScore, runContext.options.untilScore);
+    && scoreIsWorseThanTarget(score, state.options.untilScore);
 }
 
 /**

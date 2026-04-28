@@ -34,10 +34,10 @@ export { IMPLEMENTATION_PHASE_STATUS };
  */
 
 /**
- * Explicit dependency object consumed by implementation and validation. Built
- * by `createCyclePhaseView`; the planning/timeout/retry fields are read off
- * `options` directly while `testCommand`, `maxImplementers`, and
- * `implementationParallel` are precomputed defaults.
+ * Explicit dependency object consumed by implementation and validation. The
+ * planning/timeout/retry fields plus `testCommand`, `maxImplementers`, `serial`,
+ * and `parallel` are read off `options` directly; defaults for `testCommand`
+ * and `maxImplementers`, and `implementationParallel` are computed inline.
  *
  * @typedef {Object} CycleImplementationDependencies
  * @property {string} kind Workflow kind for implementer log prefixes.
@@ -46,9 +46,6 @@ export { IMPLEMENTATION_PHASE_STATUS };
  * @property {CycleRepoContext} context Repository context captured before implementation.
  * @property {CycleLogger} logger Command logger.
  * @property {import('./cycle-state.js').CycleRuntimeOptions} options Runtime options owned by the cycle state.
- * @property {string} testCommand Optional validation command (defaults to '').
- * @property {number} maxImplementers Maximum number of implementation tasks.
- * @property {boolean} implementationParallel Whether implementation batches may run in parallel.
  */
 
 /**
@@ -74,9 +71,6 @@ export async function runImplementationAndValidationPhase(dependencies, {
     context,
     logger,
     options,
-    testCommand,
-    maxImplementers,
-    implementationParallel,
   } = dependencies;
   const {
     primaryProvider,
@@ -84,7 +78,13 @@ export async function runImplementationAndValidationPhase(dependencies, {
     model,
     timeoutMs,
     providerRetries,
+    serial,
+    testCommand: rawTestCommand,
+    maxImplementers: rawMaxImplementers,
   } = options;
+  const testCommand = rawTestCommand === undefined ? '' : rawTestCommand;
+  const maxImplementers = rawMaxImplementers === undefined ? 1 : rawMaxImplementers;
+  const implementationParallel = !serial && maxImplementers > 1;
   logger.info(`cycle ${cycle}: orchestrator (${primaryProvider.id})`);
   const implementationPhase = await runOrchestratedImplementationPhase({
     provider: primaryProvider,

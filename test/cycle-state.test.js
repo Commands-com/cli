@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  createCyclePhaseView,
   createCycleRecorder,
   createCycleRunContext,
   createCycleState,
@@ -291,73 +290,4 @@ test('createCycleRecorder preserves positive issue counts when tests fail', () =
 
   assert.equal(cycleRecord.issueCount, 3.5);
   assert.equal(cycleRecord.testIssueCount, 1);
-});
-
-test('createCyclePhaseView passes options through and precomputes flat phase defaults', () => {
-  const provider = { id: 'mock' };
-  const state = createCycleState(baseStateArgs({
-    providers: [provider],
-    primaryProvider: provider,
-    providerIds: [provider.id],
-    parallel: false,
-    serial: false,
-    model: 'gpt-test',
-    timeoutMs: 1234,
-    providerRetries: 2,
-    testCommand: 'npm test',
-    maxImplementers: 3,
-    customAdapterOption: 'preserved',
-    runtimeOptions: { shouldNotLeak: true },
-  }));
-
-  const view = createCyclePhaseView(state);
-
-  assert.equal(Object.isFrozen(view), true);
-  assert.equal(view.kind, 'review');
-  assert.equal(view.context, state.context);
-  assert.equal(view.store, state.store);
-  assert.equal(view.logger, state.logger);
-  assert.equal(view.workspace, state.workspace);
-  assert.equal(view.options, state.options);
-  assert.equal(view.fanoutParallel, false);
-  assert.equal(view.implementationParallel, true);
-  assert.equal(view.maxImplementers, 3);
-  assert.equal(view.testCommand, 'npm test');
-  assert.equal(Object.hasOwn(view, 'fanoutRuntimeOptions'), false);
-  assert.equal(Object.hasOwn(view, 'synthesisRuntimeOptions'), false);
-  assert.equal(Object.hasOwn(view, 'implementationRuntimeOptions'), false);
-});
-
-test('createCyclePhaseView derives parallel flags from runtime options', () => {
-  const cases = [
-    {
-      name: 'serial disables both phase parallel flags',
-      options: { serial: true, parallel: true, maxImplementers: 3 },
-      expected: { fanoutParallel: false, implementationParallel: false },
-    },
-    {
-      name: 'single implementer enables only fanout parallel',
-      options: { serial: false, parallel: true, maxImplementers: 1 },
-      expected: { fanoutParallel: true, implementationParallel: false },
-    },
-    {
-      name: 'multiple implementers enable only implementation parallel when fanout is not parallel',
-      options: { serial: false, parallel: false, maxImplementers: 2 },
-      expected: { fanoutParallel: false, implementationParallel: true },
-    },
-    {
-      name: 'multiple implementers keep implementation parallel enabled when fanout is parallel',
-      options: { serial: false, parallel: true, maxImplementers: 2 },
-      expected: { fanoutParallel: true, implementationParallel: true },
-    },
-  ];
-
-  for (const { name, options, expected } of cases) {
-    const view = createCyclePhaseView(createCycleState(baseStateArgs(options)));
-
-    assert.deepEqual({
-      fanoutParallel: view.fanoutParallel,
-      implementationParallel: view.implementationParallel,
-    }, expected, name);
-  }
 });

@@ -6,6 +6,8 @@ import {
 } from './command-options.js';
 import { COMMAND_OPTIONS } from './command-option-schema.js';
 import { resolveRuntimeOptions } from './config.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import {
   collectRepoContext,
   createIsolatedWorktree,
@@ -194,6 +196,7 @@ export async function runCycleWorkflow(parsed, {
     options = mergeResumeOptions(knownStored, options, parsed.flags);
   }
 
+  const skipPrepareContext = !resume && Boolean(options.worktree);
   const { store, context: originalContext } = resume
     ? await prepareResumeRun(cwd, resume, options)
     : await prepareRun(cwd, {
@@ -201,15 +204,11 @@ export async function runCycleWorkflow(parsed, {
       label,
       changed: options.changed,
       writeSetupArtifacts: false,
+      collectContext: !skipPrepareContext,
     });
 
   /** @type {import('./cycle-state.js').CycleWorkspace} */
-  let workspace = {
-    mode: WORKSPACE_MODES.CURRENT,
-    cwd: originalContext.repoRoot,
-  };
-  let context = originalContext;
-
+  let workspace;
   if (resume) {
     workspace = resumeWorkspace(resume.state.workspace, originalContext);
   } else if (options.worktree) {
@@ -220,8 +219,13 @@ export async function runCycleWorkflow(parsed, {
     });
     workspace = {
       mode: WORKSPACE_MODES.WORKTREE,
-      cwd: scopedWorktreeCwd(originalContext, isolated),
+      cwd: await resolveWorktreeWorkspaceCwd(cwd, isolated),
       ...isolated,
+    };
+  } else {
+    workspace = {
+      mode: WORKSPACE_MODES.CURRENT,
+      cwd: /** @type {import('./git.js').RepoContext} */ (originalContext).repoRoot,
     };
   }
 
@@ -229,7 +233,7 @@ export async function runCycleWorkflow(parsed, {
     kind,
     store,
     workspace,
-    context,
+    context: originalContext,
     options,
     logger,
     cycles: resume?.state.cycles,
@@ -302,6 +306,20 @@ function resumeWorkspace(workspace, context) {
     mode: WORKSPACE_MODES.CURRENT,
     cwd: context.repoRoot,
   };
+}
+
+// Mirrors the realpath-resolved gitRoot/repoRoot pair `collectRepoContext` would
+// have produced for the original cwd, so `scopedWorktreeCwd` can preserve any
+// subdirectory scope without re-collecting the (otherwise unused) full context.
+async function resolveWorktreeWorkspaceCwd(cwd, isolated) {
+  const gitRoot = isolated.originalRepoRoot
+    ? await fs.realpath(isolated.originalRepoRoot).catch(() => isolated.originalRepoRoot)
+    : '';
+  const repoRoot = await fs.realpath(cwd).catch(() => path.resolve(cwd));
+  return scopedWorktreeCwd(
+    /** @type {import('./git.js').RepoContext} */ ({ gitRoot, repoRoot }),
+    isolated,
+  );
 }
 
 export function mergeResumeOptions(storedOptions, nextOptions, flags) {

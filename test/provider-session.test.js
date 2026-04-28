@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { createCyclePhaseView, createCycleState } from '../src/cycle-state.js';
+import { createCycleState } from '../src/cycle-state.js';
 import { runAssessmentProviderFanout } from '../src/cycle-fanout.js';
 import { memoryStore } from './support/memory-store.js';
 
@@ -104,8 +104,8 @@ test('assessment fan-out resumes provider sessions across cycles by provider and
     const provider = { id: 'codex', command: bin };
     const state = testState({ cwd: tmp, provider });
 
-    await runAssessmentProviderFanout(createCyclePhaseView(state), fanoutOptions());
-    await runAssessmentProviderFanout(createCyclePhaseView(state), { ...fanoutOptions(), cycle: 2 });
+    await runAssessmentProviderFanout(state, fanoutOptions());
+    await runAssessmentProviderFanout(state, { ...fanoutOptions(), cycle: 2 });
 
     assert.deepEqual(state.providerSessions, {
       'codex/areas/all-areas': 'thread-one',
@@ -147,8 +147,8 @@ test('assessment fan-out clears an invalid provider session and retries fresh on
     const provider = { id: 'codex', command: bin };
     const state = testState({ cwd: tmp, provider });
 
-    await runAssessmentProviderFanout(createCyclePhaseView(state), fanoutOptions());
-    await runAssessmentProviderFanout(createCyclePhaseView(state), { ...fanoutOptions(), cycle: 2 });
+    await runAssessmentProviderFanout(state, fanoutOptions());
+    await runAssessmentProviderFanout(state, { ...fanoutOptions(), cycle: 2 });
 
     assert.deepEqual(state.providerSessions, {
       'codex/areas/all-areas': 'fresh-thread',

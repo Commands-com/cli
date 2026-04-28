@@ -11,7 +11,6 @@ import {
   runGit,
 } from '../src/git.js';
 import {
-  createCyclePhaseView,
   createCycleRecorder,
   createCycleState,
 } from '../src/cycle-state.js';
@@ -64,13 +63,10 @@ test('runImplementationAndValidationPhase records implementation results and fai
   try {
     const testCommand = 'node -e "process.stdout.write(\'validation failed\'); process.exit(7)"';
     const state = testState(cwd, { testCommand });
-    const phaseView = createCyclePhaseView(state);
-    assert.equal(phaseView.implementationParallel, true);
-    assert.equal(Object.hasOwn(phaseView, 'implementationRuntimeOptions'), false);
     const recorder = createCycleRecorder(state);
     const cycleRecord = recorder.beginCycle(1, { issueCount: 0, score: 'B' });
 
-    const phase = await runImplementationAndValidationPhase(phaseView, {
+    const phase = await runImplementationAndValidationPhase(state, {
       cycle: 1,
       objective: 'Improve maintainability',
       findings: 'Existing synthesized findings.',
@@ -141,7 +137,7 @@ test('runImplementationAndValidationPhase preserves explicit empty plans as no-o
       synopsis: 'Only gated findings remain.',
     });
 
-    const phase = await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+    const phase = await runImplementationAndValidationPhase(state, {
       cycle: 1,
       objective: 'Handle empty implementation plan',
       findings: 'No actionable findings.',
@@ -214,7 +210,7 @@ test('runImplementationAndValidationPhase preserves partial result when validati
       return originalWrite(name, value);
     };
 
-    const phase = await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+    const phase = await runImplementationAndValidationPhase(state, {
       cycle: 1,
       objective: 'preserve partial result',
       findings: 'Original findings.',
@@ -326,7 +322,7 @@ test('runImplementationAndValidationPhase seeds later scoped task worktrees with
       logger: { jsonMode: true, info() {} },
     });
 
-    const phase = await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+    const phase = await runImplementationAndValidationPhase(state, {
       cycle: 1,
       objective: 'carry scoped worktree changes across batches',
       findings: 'batch two depends on the generated file from batch one',

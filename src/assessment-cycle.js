@@ -4,7 +4,6 @@ import {
 } from './artifact-paths.js';
 import {
   createCycleRecorder,
-  createCyclePhaseView,
   createCycleRunContext,
 } from './cycle-state.js';
 import {
@@ -238,12 +237,11 @@ export async function runAssessmentCycles(state, adapter) {
     const cycleContext = createAssessmentCycleContext(state, cycle);
     await callOptional(adapter.logCycleStart, cycleContext);
 
-    const phaseView = createCyclePhaseView(state);
     const fanoutOptions = adapter.fanout(cycleContext);
     if (!isObjectRecord(fanoutOptions)) {
       throw new Error('runAssessmentCycles requires adapter.fanout to return options object');
     }
-    const { outputs, failures: fanoutFailures } = await runAssessmentProviderFanout(phaseView, {
+    const { outputs, failures: fanoutFailures } = await runAssessmentProviderFanout(state, {
       cycle,
       ...fanoutOptions,
       internal: {
@@ -260,7 +258,7 @@ export async function runAssessmentCycles(state, adapter) {
       cycleSummary,
     } = await maybeSynthesizeOutputs({
       adapter,
-      phaseView,
+      state,
       cycleContext,
       outputs,
       outputSummary,
@@ -313,7 +311,7 @@ export async function runAssessmentCycles(state, adapter) {
     }
 
     const implementationHandoff = adapter.implementation(postRecordContext);
-    const implementationPhase = await runImplementationAndValidationPhase(phaseView, {
+    const implementationPhase = await runImplementationAndValidationPhase(state, {
       cycle,
       findings: recorder.priorFindings,
       ...implementationHandoff,
@@ -333,7 +331,7 @@ export async function runAssessmentCycles(state, adapter) {
 
 async function maybeSynthesizeOutputs({
   adapter,
-  phaseView,
+  state,
   cycleContext,
   outputs,
   outputSummary,
@@ -348,7 +346,7 @@ async function maybeSynthesizeOutputs({
   }
 
   const synthesisPrompt = adapter.buildSynthesisPrompt({ ...cycleContext, outputs });
-  const { synthesisProvider, synthesisText, synthesisError } = await runSynthesisWithFallback(phaseView, {
+  const { synthesisProvider, synthesisText, synthesisError } = await runSynthesisWithFallback(state, {
     cycle: cycleContext.cycle,
     prompt: synthesisPrompt,
     fallbackDescription: adapter.synthesisFallbackDescription,

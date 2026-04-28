@@ -7,7 +7,6 @@ import {
   cycleProviderItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
 import {
-  createCyclePhaseView,
   createCycleRecorder,
   createCycleState,
 } from '../src/cycle-state.js';
@@ -119,7 +118,7 @@ test('createCycleState preserves nested runtimeOptions only under owned options'
   assert.equal(Object.hasOwn(state, 'runtimeOptions'), false);
 });
 
-test('createCyclePhaseView projects state.options for fan-out', async () => {
+test('runAssessmentProviderFanout reads provider settings from state.options for fan-out', async () => {
   const state = testState({
     providers: [{ id: 'mock' }],
     json: true,
@@ -131,8 +130,7 @@ test('createCyclePhaseView projects state.options for fan-out', async () => {
   Reflect.set(state, 'providerRetries', 99);
   Reflect.set(state, 'json', false);
 
-  const phaseView = createCyclePhaseView(state);
-  const { outputs } = await runAssessmentProviderFanout(phaseView, {
+  const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 2,
     internal: {
       artifactPaths: cycleProviderItemArtifactDescriptor,
@@ -162,36 +160,6 @@ test('createCyclePhaseView projects state.options for fan-out', async () => {
       'cycle-2/areas/mock/maintainability.md',
     ],
   );
-});
-
-test('cycle phase view reads from state.options without widening state', () => {
-  const state = testState({
-    providers: [{ id: 'mock' }, { id: 'codex' }],
-    primaryProvider: { id: 'mock' },
-    model: 'resolved-model',
-    timeoutMs: 12_345,
-    providerRetries: 2,
-    maxImplementers: 3,
-    serial: false,
-    testCommand: 'npm test',
-    customOption: 'preserved',
-    runtimeOptions: { shouldNotLeak: true },
-  });
-  Reflect.set(state, 'providers', [{ id: 'stale-provider' }]);
-  Reflect.set(state, 'primaryProvider', { id: 'stale-provider' });
-  Reflect.set(state, 'model', 'stale-model');
-  Reflect.set(state, 'timeoutMs', 1);
-  Reflect.set(state, 'providerRetries', 99);
-  Reflect.set(state, 'runtimeOptions', {
-    providers: [{ id: 'stale-provider' }],
-  });
-
-  const view = createCyclePhaseView(state);
-
-  assert.equal(view.options, state.options);
-  assert.equal(view.options.providers, state.options.providers);
-  assert.equal(Object.hasOwn(view, 'runtimeOptions'), false);
-  assert.equal(Object.hasOwn(view, 'fanoutRuntimeOptions'), false);
 });
 
 test('beginCycle creates and stores a cycle record with optional prior findings', () => {

@@ -4,9 +4,6 @@ import {
   runAssessmentProviderFanout,
 } from '../src/cycle-fanout.js';
 import {
-  createCyclePhaseView,
-} from '../src/cycle-state.js';
-import {
   cycleProviderItemArtifactDescriptor,
   providerItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
@@ -21,7 +18,7 @@ test('runAssessmentProviderFanout normalizes primitive items for prompts, artifa
   const mirrorCalls = [];
   const logCalls = [];
 
-  const result = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const result = await runAssessmentProviderFanout(state, {
     cycle: 2,
     ...cycleArtifactOptions(),
     items: ['Maintainability & Tests'],
@@ -92,7 +89,7 @@ test('runAssessmentProviderFanout expands descriptor items across multiple provi
     ],
   });
 
-  const { outputs } = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 1,
     ...cycleArtifactOptions(),
     items: [
@@ -209,7 +206,7 @@ test('runAssessmentProviderFanout uses explicit cycle artifact defaults', async 
   const item = { value: 'API Design', label: 'API Design', pathSegment: 'api-design' };
   const additionalArtifacts = [];
 
-  const { outputs } = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 5,
     ...cycleArtifactOptions(),
     items: [item],
@@ -254,7 +251,7 @@ test('runAssessmentProviderFanout uses explicit cycle artifact defaults', async 
 test('runAssessmentProviderFanout ignores legacy option-level artifact paths without internal contract', async () => {
   const state = testState();
 
-  const { outputs } = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const { outputs } = await runAssessmentProviderFanout(state, {
     cycle: 4,
     artifactPaths: cycleProviderItemArtifactDescriptor,
     items: [{ value: 'stability', label: 'stability', pathSegment: 'stability' }],

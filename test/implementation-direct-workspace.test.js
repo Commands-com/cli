@@ -9,7 +9,6 @@ import {
 } from '../src/implementation.js';
 import { runImplementationAndValidationPhase } from '../src/cycle-implementation.js';
 import {
-  createCyclePhaseView,
   createCycleRecorder,
   createCycleState,
 } from '../src/cycle-state.js';
@@ -415,7 +414,7 @@ test('runImplementationAndValidationPhase exposes partial results for cycle stat
     const recorder = createCycleRecorder(state);
     const cycleRecord = recorder.beginCycle(1, { issueCount: 1, score: 'B' });
 
-    const phase = await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+    const phase = await runImplementationAndValidationPhase(state, {
       cycle: 1,
       objective: 'preserve partial cycle implementation',
       findings: 'batch one should be recorded even when batch two fails',

@@ -125,14 +125,16 @@ export async function runAssessmentProviderFanout(dependencies, options = {}) {
     logger = {},
     providerSessions,
     options: phaseOptions,
-    fanoutParallel,
   } = dependencies;
   const {
     providers,
     model,
     timeoutMs,
     providerRetries,
+    serial,
+    parallel,
   } = phaseOptions;
+  const fanoutParallel = !serial && Boolean(parallel);
   const jobs = buildAssessmentFanoutJobs({ providers, items });
   const run = createFanoutJobRunner({
     cycle,

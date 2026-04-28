@@ -5,7 +5,6 @@ import path from 'node:path';
 import {
   runSynthesisWithFallback,
 } from '../src/cycle-synthesis.js';
-import { createCyclePhaseView } from '../src/cycle-state.js';
 import { runCycleWorkflow } from '../src/cycle-workflow.js';
 import { runShell, scopedWorktreeCwd } from '../src/workflow.js';
 import { initGitRepo, run, tempDir } from './support/cli.js';
@@ -89,7 +88,7 @@ test('runSynthesisWithFallback uses provider settings from state.options', async
       },
     };
 
-    const result = await runSynthesisWithFallback(createCyclePhaseView(state), {
+    const result = await runSynthesisWithFallback(state, {
       cycle: 1,
       prompt,
       fallbackDescription: 'reviewer summaries',

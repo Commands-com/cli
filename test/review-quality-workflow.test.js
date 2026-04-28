@@ -9,7 +9,6 @@ import {
   cycleProviderItemArtifactDescriptor,
 } from '../src/artifact-paths.js';
 import {
-  createCyclePhaseView,
   createCycleRecorder,
 } from '../src/cycle-state.js';
 import {
@@ -71,7 +70,7 @@ test('runSynthesisWithFallback writes prompt and synthesis artifacts', async () 
       '<!-- commands-com-prompt-intent: {"kind":"review-synthesis","cycle":1,"inputLabel":"Reviewer outputs:"} -->',
     ].join('\n');
 
-    const result = await runSynthesisWithFallback(createCyclePhaseView(state), {
+    const result = await runSynthesisWithFallback(state, {
       cycle: 1,
       prompt,
       fallbackDescription: 'reviewer summaries',
@@ -100,7 +99,7 @@ test('runAssessmentProviderFanout writes descriptor-based prompt and artifact pa
     const state = localCycleState(cwd, { dir: storeDir, kind: 'quality' });
     const mirroredPaths = [];
 
-    const { outputs } = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+    const { outputs } = await runAssessmentProviderFanout(state, {
       cycle: 1,
       internal: {
         artifactPaths: cycleProviderItemArtifactDescriptor,
@@ -159,7 +158,7 @@ test('runAssessmentProviderFanout does not write caller-specific mirror artifact
     const storeDir = path.join(cwd, 'store');
     const state = localCycleState(cwd, { dir: storeDir, kind: 'quality' });
 
-    await runAssessmentProviderFanout(createCyclePhaseView(state), {
+    await runAssessmentProviderFanout(state, {
       cycle: 1,
       internal: {
         artifactPaths: cycleProviderItemArtifactDescriptor,

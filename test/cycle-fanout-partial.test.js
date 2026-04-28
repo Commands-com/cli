@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runAssessmentProviderFanout } from '../src/cycle-fanout.js';
-import { createCyclePhaseView } from '../src/cycle-state.js';
 import { fanoutError } from './support/assertions.js';
 import { cycleArtifactOptions } from './support/cycle-artifact-fixtures.js';
 import { fanoutDependencies, testState } from './support/cycle-fanout-fixtures.js';
@@ -75,7 +74,7 @@ test('runAssessmentProviderFanout partial mode returns deduplicated outputs alon
     },
   });
 
-  const result = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const result = await runAssessmentProviderFanout(state, {
     cycle: 3,
     ...cycleArtifactOptions(),
     items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
@@ -127,7 +126,7 @@ test('runAssessmentProviderFanout partial mode flags partial-success returns wit
     parallel: true,
   });
 
-  const result = await runAssessmentProviderFanout(createCyclePhaseView(state), {
+  const result = await runAssessmentProviderFanout(state, {
     cycle: 6,
     ...cycleArtifactOptions(),
     items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
@@ -163,7 +162,7 @@ test('runAssessmentProviderFanout partial mode throws when every job fails so fi
   });
 
   await assert.rejects(
-    runAssessmentProviderFanout(createCyclePhaseView(state), {
+    runAssessmentProviderFanout(state, {
       cycle: 4,
       ...cycleArtifactOptions(),
       items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
@@ -207,7 +206,7 @@ test('runAssessmentProviderFanout partial mode throws on serial all-failed fan-o
   });
 
   await assert.rejects(
-    runAssessmentProviderFanout(createCyclePhaseView(state), {
+    runAssessmentProviderFanout(state, {
       cycle: 5,
       ...cycleArtifactOptions(),
       items: [{ value: 'maintainability', label: 'maintainability', pathSegment: 'maintainability' }],
