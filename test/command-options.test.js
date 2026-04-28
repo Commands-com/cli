@@ -10,6 +10,7 @@ import {
   readCommandOptionValue,
   stringOption,
 } from '../src/command-options.js';
+import { isUsageError } from './support/assertions.js';
 
 function optionByName(name) {
   const option = COMMAND_OPTIONS.find((item) => item.name === name);
@@ -73,7 +74,7 @@ test('readCommandOptionValue treats boolean true as the missing-value sentinel',
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['timeout-ms', true]]), 'timeout-ms', 30_000),
-    (error) => error.name === 'UsageError' && error.message === '--timeout-ms requires a positive integer value',
+    (error) => isUsageError(error, '--timeout-ms requires a positive integer value'),
   );
 });
 
@@ -103,11 +104,11 @@ test('readCommandOptionValue rejects unknown flags clearly', () => {
 test('numeric option readers reject invalid numeric prefixes', () => {
   assert.throws(
     () => readCommandOptionValue(new Map([['max-cycles', '10abc']]), 'max-cycles', 3),
-    (error) => error.name === 'UsageError' && /--max-cycles expects a positive integer/.test(error.message),
+    (error) => isUsageError(error, /--max-cycles expects a positive integer/),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['retries', '2ms']]), 'retries', 1),
-    (error) => error.name === 'UsageError' && /--retries expects a non-negative integer/.test(error.message),
+    (error) => isUsageError(error, /--retries expects a non-negative integer/),
   );
   assert.equal(
     readCommandOptionValue(new Map([['timeout-ms', '0010']]), 'timeout-ms', 1),
@@ -118,41 +119,41 @@ test('numeric option readers reject invalid numeric prefixes', () => {
 test('positiveIntegerOption throws UsageError for non-numeric input', () => {
   assert.throws(
     () => positiveIntegerOption(new Map([['timeout-ms', 'nope']]), 'timeout-ms', 30_000),
-    (error) => error.name === 'UsageError' && error.message === '--timeout-ms expects a positive integer, got "nope"',
+    (error) => isUsageError(error, '--timeout-ms expects a positive integer, got "nope"'),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['timeout-ms', 'nope']]), 'timeout-ms', 30_000),
-    (error) => error.name === 'UsageError' && error.message === '--timeout-ms expects a positive integer, got "nope"',
+    (error) => isUsageError(error, '--timeout-ms expects a positive integer, got "nope"'),
   );
 });
 
 test('positiveIntegerOption throws UsageError for zero or negative values', () => {
   assert.throws(
     () => positiveIntegerOption(new Map([['max-cycles', '0']]), 'max-cycles', 3),
-    (error) => error.name === 'UsageError' && error.message === '--max-cycles expects a positive integer, got "0"',
+    (error) => isUsageError(error, '--max-cycles expects a positive integer, got "0"'),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['max-cycles', '0']]), 'max-cycles', 3),
-    (error) => error.name === 'UsageError' && /--max-cycles expects a positive integer/.test(error.message),
+    (error) => isUsageError(error, /--max-cycles expects a positive integer/),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['retries', '-1']]), 'retries', 1),
-    (error) => error.name === 'UsageError' && /--retries expects a non-negative integer/.test(error.message),
+    (error) => isUsageError(error, /--retries expects a non-negative integer/),
   );
 });
 
 test('numeric option readers throw UsageError when a value flag is missing its value', () => {
   assert.throws(
     () => positiveIntegerOption(new Map([['timeout-ms', true]]), 'timeout-ms', 30_000),
-    (error) => error.name === 'UsageError' && error.message === '--timeout-ms requires a positive integer value',
+    (error) => isUsageError(error, '--timeout-ms requires a positive integer value'),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['max-cycles', true]]), 'max-cycles', 3),
-    (error) => error.name === 'UsageError' && error.message === '--max-cycles requires a positive integer value',
+    (error) => isUsageError(error, '--max-cycles requires a positive integer value'),
   );
   assert.throws(
     () => readCommandOptionValue(new Map([['retries', true]]), 'retries', 1),
-    (error) => error.name === 'UsageError' && error.message === '--retries requires a non-negative integer value',
+    (error) => isUsageError(error, '--retries requires a non-negative integer value'),
   );
 });
 
@@ -160,7 +161,7 @@ test('positiveIntegerOption enforces an optional max bound', () => {
   assert.equal(positiveIntegerOption(new Map([['max-implementers', '32']]), 'max-implementers', 15, { max: 32 }), 32);
   assert.throws(
     () => positiveIntegerOption(new Map([['max-implementers', '33']]), 'max-implementers', 15, { max: 32 }),
-    (error) => error.name === 'UsageError' && error.message === '--max-implementers must be at most 32, got 33',
+    (error) => isUsageError(error, '--max-implementers must be at most 32, got 33'),
   );
 });
 

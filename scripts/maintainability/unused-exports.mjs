@@ -12,7 +12,6 @@ export function collectUnusedExports({
   exportRoots,
   consumerRoots,
   excludedRoots,
-  allowlist,
 }) {
   const exportFiles = collectUniqueJavaScriptFiles(exportRoots, { repoRoot, excludedRoots });
   const exportByFile = new Map(exportFiles.map((file) => [
@@ -48,10 +47,7 @@ export function collectUnusedExports({
             reference: unusedExportReference(relativeFile, exportName),
           };
         })
-        .filter(({ exportName, reference }) => (
-          !usedExports.has(exportName)
-          && !allowlist.has(reference)
-        ));
+        .filter(({ exportName }) => !usedExports.has(exportName));
     })
     .sort(compareUnusedExportEntries);
 }

@@ -6,6 +6,7 @@ import {
   resolveRoomCommandOptions,
 } from '../src/command-options.js';
 import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
+import { isUsageError } from './support/assertions.js';
 
 function flags(entries = []) {
   return new Map(entries);
@@ -140,7 +141,7 @@ test('resolveCycleCommandOptions surfaces invalid scalar option values as UsageE
   for (const [flag, value, message] of cases) {
     assert.throws(
       () => resolveCycleCommandOptions(flags([['fix', 'true'], [flag, value]])),
-      (error) => error.name === 'UsageError' && error.message === message,
+      (error) => isUsageError(error, message),
       `expected --${flag} ${value} to throw UsageError`,
     );
   }
@@ -170,7 +171,7 @@ test('resolveCycleCommandOptions normalizes quality until targets', () => {
   );
   assert.throws(
     () => resolveCycleCommandOptions(flags([['until', 'gold']])),
-    (error) => error.name === 'UsageError' && error.message === '--until must be one of A, B, C, D, F',
+    (error) => isUsageError(error, '--until must be one of A, B, C, D, F'),
   );
 });
 

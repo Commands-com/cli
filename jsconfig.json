@@ -13,8 +13,7 @@
     "scripts/maintainability-check.mjs",
     "bin/**/*.js",
     "src/**/*.js",
-    "test/**/*.js",
-    "types/**/*.d.ts"
+    "test/**/*.js"
   ],
   "exclude": [
     "node_modules",
@@ -45,12 +44,10 @@
       "src",
       "test"
     ],
-    "unusedExportAllowlist": [],
     "unusedExportReportLimit": 20,
     "typeCheckRoots": [
       "bin",
       "src"
-    ],
-    "typeCheckAllowlist": []
+    ]
   }
 }

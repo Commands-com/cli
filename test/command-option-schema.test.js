@@ -14,6 +14,7 @@ import { readCommandOptionValue } from '../src/command-options.js';
 import {
   COMMAND_REGISTRY,
 } from '../src/command-registry.js';
+import { isUsageError } from './support/assertions.js';
 
 function duplicateValues(values) {
   const seen = new Set();
@@ -151,8 +152,7 @@ test('--max-implementers rejects values above MAX_IMPLEMENTERS at parse time', (
   assert.equal(MAX_IMPLEMENTERS, 32);
   assert.throws(
     () => resolveCycleCommandOptions(flags([['max-implementers', '9999']])),
-    (error) => error.name === 'UsageError'
-      && error.message === '--max-implementers must be at most 32, got 9999',
+    (error) => isUsageError(error, '--max-implementers must be at most 32, got 9999'),
   );
 });
 

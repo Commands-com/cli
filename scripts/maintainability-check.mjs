@@ -54,9 +54,7 @@ export function checkMaintainability({
     testFileReportLimit,
     testFileReportRoots,
     testFileSizePolicy,
-    typeCheckAllowlist,
     typeCheckRoots,
-    unusedExportAllowlist,
     unusedExportConsumerRoots,
     unusedExportPolicy,
     unusedExportReportLimit,
@@ -88,7 +86,6 @@ export function checkMaintainability({
       exportRoots: unusedExportRoots,
       consumerRoots: unusedExportConsumerRoots,
       excludedRoots,
-      allowlist: unusedExportAllowlist,
     });
   const packageValidationFindings = collectPackageValidationFindings({
     repoRoot: resolvedRepoRoot,
@@ -98,7 +95,6 @@ export function checkMaintainability({
     include: config.include,
     roots: typeCheckRoots,
     excludedRoots,
-    allowlist: typeCheckAllowlist,
   });
 
   writeTestFileSizeReport({

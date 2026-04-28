@@ -9,23 +9,16 @@ export function collectTypeCheckMissingFiles({
   include = [],
   roots = [],
   excludedRoots = new Set(),
-  allowlist = new Set(),
 }) {
   if (roots.length === 0) {
     return [];
   }
 
   const includeEntries = normalizeJsconfigIncludes(include);
-  const allowedMissingFiles = allowlist instanceof Set
-    ? allowlist
-    : new Set(allowlist);
 
   return collectUniqueJavaScriptFiles(roots, { repoRoot, excludedRoots })
     .map((file) => normalizePath(relative(repoRoot, file)))
-    .filter((file) => (
-      !jsconfigIncludesFile(includeEntries, file)
-      && !allowedMissingFiles.has(file)
-    ))
+    .filter((file) => !jsconfigIncludesFile(includeEntries, file))
     .sort();
 }
 
@@ -63,7 +56,7 @@ export function writeTypeCheckCoverageFindings({ missingFiles, writeError }) {
     return;
   }
 
-  writeError(`Error: jsconfig check-js coverage is missing ${missingFiles.length} src file${missingFiles.length === 1 ? '' : 's'} not in maintainabilityGuard.typeCheckAllowlist`);
+  writeError(`Error: jsconfig check-js coverage is missing ${missingFiles.length} configured file${missingFiles.length === 1 ? '' : 's'}`);
   for (const file of missingFiles) {
     writeError(`  ${file}`);
   }

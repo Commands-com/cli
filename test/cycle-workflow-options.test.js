@@ -8,6 +8,7 @@ import {
 } from '../src/command-options.js';
 import { runCycleWorkflow } from '../src/cycle-workflow.js';
 import { tempDir } from './support/cli.js';
+import { isUsageError } from './support/assertions.js';
 
 function flags(entries = []) {
   return new Map(entries);
@@ -135,7 +136,7 @@ test('resolveCycleCommandOptions lets quality --until drive fix-loop defaults', 
   );
   assert.throws(
     () => resolveCycleCommandOptions(flags([['until', 'pass']])),
-    (error) => error.name === 'UsageError' && error.message === '--until must be one of A, B, C, D, F',
+    (error) => isUsageError(error, '--until must be one of A, B, C, D, F'),
   );
 });
 
@@ -320,8 +321,7 @@ test('resolveRoomCommandOptions clamps participant limits and keeps synthesis ex
 
   assert.throws(
     () => resolveRoomCommandOptions(flags([['participants', '0']]), { participantCount: 3 }),
-    (error) => error.name === 'UsageError'
-      && error.message === '--participants expects a positive integer, got "0"',
+    (error) => isUsageError(error, '--participants expects a positive integer, got "0"'),
   );
 });
 

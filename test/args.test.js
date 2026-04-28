@@ -16,6 +16,7 @@ import {
   stringOption,
   validateFlagsForCommand,
 } from '../src/command-options.js';
+import { isUsageError } from './support/assertions.js';
 
 const COMMON_FLAG_NAMES = Object.freeze(['cwd', 'json']);
 
@@ -205,22 +206,22 @@ test('command option metadata keeps command-specific flags out of common scope',
 test('validateFlagsForCommand rejects unknown flags', () => {
   assert.throws(
     () => validateFlagsForCommand('review', new Map([['mystery', 'true']])),
-    (error) => error.name === 'UsageError' && error.message === 'unknown option: --mystery',
+    (error) => isUsageError(error, 'unknown option: --mystery'),
   );
 });
 
 test('validateFlagsForCommand rejects flags from the wrong command scope', () => {
   assert.throws(
     () => validateFlagsForCommand('doctor', new Map([['area', 'maintainability']])),
-    (error) => error.name === 'UsageError' && error.message === '--area is not valid for doctor command',
+    (error) => isUsageError(error, '--area is not valid for doctor command'),
   );
   assert.throws(
     () => validateFlagsForCommand('quality', new Map([['reviewers', 'security']])),
-    (error) => error.name === 'UsageError' && error.message === '--reviewers is not valid for quality command',
+    (error) => isUsageError(error, '--reviewers is not valid for quality command'),
   );
   assert.throws(
     () => validateFlagsForCommand('room', new Map([['serial', 'true']])),
-    (error) => error.name === 'UsageError' && error.message === '--serial is not valid for room command',
+    (error) => isUsageError(error, '--serial is not valid for room command'),
   );
 });
 
@@ -259,7 +260,7 @@ test('validateFlagsForCommand treats rooms as a common-only command scope', () =
   for (const [flag, value] of [['participants', '2'], ['provider', 'mock'], ['area', 'tests']]) {
     assert.throws(
       () => validateFlagsForCommand('rooms', new Map([[flag, value]])),
-      (error) => error.name === 'UsageError' && error.message === `--${flag} is not valid for rooms command`,
+      (error) => isUsageError(error, `--${flag} is not valid for rooms command`),
       `expected --${flag} to be rejected for rooms`,
     );
   }
@@ -283,7 +284,7 @@ test('validateFlagsForCommand preserves help command behavior', () => {
 
   assert.throws(
     () => validateFlagsForCommand('help', new Map([['participants', '2']])),
-    (error) => error.name === 'UsageError' && error.message === '--participants is not valid for help command',
+    (error) => isUsageError(error, '--participants is not valid for help command'),
   );
 });
 
@@ -294,12 +295,12 @@ test('validateFlagsForCommand rejects scoped flags on unknown commands', () => {
 
   assert.throws(
     () => validateFlagsForCommand('does-not-exist', new Map([['area', 'tests']])),
-    (error) => error.name === 'UsageError' && error.message === '--area is not valid for unknown command does-not-exist',
+    (error) => isUsageError(error, '--area is not valid for unknown command does-not-exist'),
   );
 
   assert.throws(
     () => validateFlagsForCommand('does-not-exist', new Map([['mystery', 'true']])),
-    (error) => error.name === 'UsageError' && error.message === 'unknown option: --mystery',
+    (error) => isUsageError(error, 'unknown option: --mystery'),
   );
 });
 

@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { prepareRun } from '../src/run-store.js';
 import { runRunsCommand } from '../src/runs.js';
+import { isUsageError } from './support/assertions.js';
 import { tempDir } from './support/cli.js';
 
 async function writeRunMetadata(cwd, runId, metadata = {}) {
@@ -261,7 +262,7 @@ test('runRunsCommand rejects unknown subcommands', async () => {
   try {
     await assert.rejects(
       runRuns(cwd, ['archive']),
-      (error) => error.name === 'UsageError' && error.message === 'unknown runs subcommand: archive',
+      (error) => isUsageError(error, 'unknown runs subcommand: archive'),
     );
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
@@ -379,7 +380,7 @@ test('showRun still rejects ids whose run dir does not exist', async () => {
     const missingRunId = '20260101-010101-review-no-dir-aaaaaa';
     await assert.rejects(
       runRuns(cwd, ['show', missingRunId]),
-      (error) => error.name === 'UsageError' && error.message === `run not found: ${missingRunId}`,
+      (error) => isUsageError(error, `run not found: ${missingRunId}`),
     );
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
@@ -422,7 +423,7 @@ test('showRun rejects ids outside the timestamped run-id contract', async () => 
       await writeRunMetadata(cwd, runId);
       await assert.rejects(
         runRuns(cwd, ['show', runId]),
-        (error) => error.name === 'UsageError' && error.message === `run not found: ${runId}`,
+        (error) => isUsageError(error, `run not found: ${runId}`),
       );
     }
 
@@ -431,7 +432,7 @@ test('showRun rejects ids outside the timestamped run-id contract', async () => 
 
     await assert.rejects(
       runRuns(cwd, ['show', plainRunId]),
-      (error) => error.name === 'UsageError' && error.message === `run not found: ${plainRunId}`,
+      (error) => isUsageError(error, `run not found: ${plainRunId}`),
     );
 
     const unicodeSeparator = String.fromCharCode(0x2215);
@@ -440,7 +441,7 @@ test('showRun rejects ids outside the timestamped run-id contract', async () => 
 
     await assert.rejects(
       runRuns(cwd, ['show', unicodeRunId]),
-      (error) => error.name === 'UsageError' && error.message === `run not found: ${unicodeRunId}`,
+      (error) => isUsageError(error, `run not found: ${unicodeRunId}`),
     );
 
     await assert.rejects(runRuns(cwd, ['show', '../outside']), /run id is required/);

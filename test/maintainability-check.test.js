@@ -206,7 +206,7 @@ test('maintainability check requires a test limit when test size policy is enabl
   );
 });
 
-test('maintainability check reports unused runtime exports with allowlist support', async (t) => {
+test('maintainability check reports unused runtime exports', async (t) => {
   const repoRoot = await createTempRepo(t);
   const stderr = [];
   await writeConfig(repoRoot, {
@@ -215,13 +215,11 @@ test('maintainability check reports unused runtime exports with allowlist suppor
       unusedExportPolicy: 'warn',
       unusedExportRoots: ['src'],
       unusedExportConsumerRoots: ['src'],
-      unusedExportAllowlist: ['src/source.js#allowed'],
     },
   });
   await writeFile(path.join(repoRoot, 'src', 'source.js'), [
     'export function used() {}',
     'export function reexported() {}',
-    'export function allowed() {}',
     'export function unused() {}',
   ]);
   await writeFile(path.join(repoRoot, 'src', 'barrel.js'), [
@@ -311,11 +309,9 @@ test('maintainability check fails src files missing check-js coverage', async (t
     maintainabilityGuard: {
       maxRuntimeFileLines: 20,
       typeCheckRoots: ['src'],
-      typeCheckAllowlist: ['src/legacy.js'],
     },
   });
   await writeFile(path.join(repoRoot, 'src', 'checked.js'), ['const checked = true;', 'void checked;']);
-  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), ['const legacy = true;', 'void legacy;']);
   await writeFile(path.join(repoRoot, 'src', 'new-file.js'), ['const missed = true;', 'void missed;']);
 
   const result = checkMaintainability({
@@ -326,15 +322,14 @@ test('maintainability check fails src files missing check-js coverage', async (t
   assert.equal(result.ok, false);
   assert.deepEqual(result.typeCheckMissingFiles, ['src/new-file.js']);
   assert.deepEqual(stderr, [
-    'Error: jsconfig check-js coverage is missing 1 src file not in maintainabilityGuard.typeCheckAllowlist',
+    'Error: jsconfig check-js coverage is missing 1 configured file',
     '  src/new-file.js',
   ]);
 });
 
-test('type-check coverage guard catches a new src file outside include and allowlist', async (t) => {
+test('type-check coverage guard catches new files outside include', async (t) => {
   const repoRoot = await createTempRepo(t);
   await writeFile(path.join(repoRoot, 'src', 'checked.js'), ['const checked = true;', 'void checked;']);
-  await writeFile(path.join(repoRoot, 'src', 'legacy.js'), ['const legacy = true;', 'void legacy;']);
   await writeFile(path.join(repoRoot, 'src', 'new-runtime-file.js'), [
     'const uncovered = true;',
     'void uncovered;',
@@ -345,7 +340,6 @@ test('type-check coverage guard catches a new src file outside include and allow
     include: ['src/checked.js'],
     roots: ['src'],
     excludedRoots: new Set(),
-    allowlist: new Set(['src/legacy.js']),
   });
 
   assert.deepEqual(missingFiles, ['src/new-runtime-file.js']);
@@ -358,7 +352,6 @@ test('maintainability check accepts recursive src check-js coverage', async (t) 
     maintainabilityGuard: {
       maxRuntimeFileLines: 20,
       typeCheckRoots: ['bin', 'src'],
-      typeCheckAllowlist: [],
     },
   });
   await writeFile(path.join(repoRoot, 'bin', 'cli.js'), ['const cli = true;', 'void cli;']);
@@ -379,41 +372,6 @@ test('maintainability check accepts recursive src check-js coverage', async (t) 
   assert.deepEqual(result.typeCheckMissingFiles, []);
   assert.deepEqual(result.testTypeCheckIncludes, ['test/**/*.js']);
   assert.deepEqual(stdout, ['Test type-checking covers all test JavaScript files: test/**/*.js']);
-});
-
-test('maintainability check rejects invalid type-check allowlist config', async (t) => {
-  const repoRoot = await createTempRepo(t);
-  await fs.mkdir(path.join(repoRoot, 'src'), { recursive: true });
-
-  const cases = [
-    {
-      typeCheckAllowlist: 'src/legacy.js',
-      expected: /maintainabilityGuard\.typeCheckAllowlist must be an array/,
-    },
-    {
-      typeCheckAllowlist: [''],
-      expected: /maintainabilityGuard\.typeCheckAllowlist must contain non-empty strings/,
-    },
-    {
-      typeCheckAllowlist: ['../legacy.js'],
-      expected: /maintainabilityGuard\.typeCheckAllowlist entries must use repo-relative file\.js paths/,
-    },
-    {
-      typeCheckAllowlist: ['src/legacy.ts'],
-      expected: /maintainabilityGuard\.typeCheckAllowlist entries must use repo-relative file\.js paths/,
-    },
-  ];
-
-  for (const { typeCheckAllowlist, expected } of cases) {
-    await writeConfig(repoRoot, {
-      maintainabilityGuard: {
-        maxRuntimeFileLines: 20,
-        typeCheckRoots: ['src'],
-        typeCheckAllowlist,
-      },
-    });
-    assert.throws(() => checkMaintainability({ repoRoot }), expected);
-  }
 });
 
 test('maintainability check fails broken package script policies', async (t) => {
@@ -511,14 +469,12 @@ test('package script validation rejects misleading recursive-looking targets', (
   ]);
 });
 
-test('repository maintainability guard has no unused export allowlist entries', () => {
+test('repository maintainability guard enables strict export and type-check policies', () => {
   const config = readJson(new URL('../jsconfig.json', import.meta.url));
   const guard = config.maintainabilityGuard;
 
-  assert.deepEqual(guard.unusedExportAllowlist, []);
   assert.deepEqual(guard.unusedExportConsumerRoots, ['bin', 'src', 'test']);
   assert.deepEqual(guard.typeCheckRoots, ['bin', 'src']);
-  assert.deepEqual(guard.typeCheckAllowlist, []);
 });
 
 async function createTempRepo(t) {
