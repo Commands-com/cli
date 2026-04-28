@@ -12,6 +12,7 @@ import {
 } from '../src/assessment-report.js';
 import { memoryStore } from './support/memory-store.js';
 
+/** @param {any} args @returns {any} */
 function assessmentState({
   kind = 'quality',
   cycle,
@@ -43,6 +44,7 @@ function assessmentState({
   };
 }
 
+/** @returns {any} */
 function jsonLogger() {
   return {
     jsonMode: true,
@@ -54,6 +56,7 @@ function jsonLogger() {
   };
 }
 
+/** @param {any} state @param {{ hasFinalIssues: any }} args */
 function completeAssessment(state, { hasFinalIssues }) {
   return completeAssessmentCommandRun({
     state,
@@ -70,6 +73,7 @@ function completeAssessment(state, { hasFinalIssues }) {
   });
 }
 
+/** @param {any} state @param {any} cycle @param {any} hasFinalIssues */
 function finalStateFor(state, cycle, hasFinalIssues) {
   return buildAssessmentFinalState(state, cycle, { hasFinalIssues });
 }
@@ -267,6 +271,7 @@ test('completeAssessmentCommandRun passes when until target score is met with re
 });
 
 test('assessment final policy under until B handles review and quality B/0, B/1, and C/0', () => {
+  /** @type {Array<{ label: string, cycle: any, expectedHasIssues: boolean }>} */
   const cases = [
     {
       label: 'B/0',
@@ -296,6 +301,7 @@ test('assessment final policy under until B handles review and quality B/0, B/1,
       expectedHasIssues: true,
     },
   ];
+  /** @type {Array<[string, any]>} */
   const commands = [
     ['review', reviewHasFinalIssues],
     ['quality', qualityHasFinalIssues],
@@ -319,11 +325,13 @@ test('assessment final policy under until B handles review and quality B/0, B/1,
 });
 
 test('assessmentNeedsImplementation under until B handles review and quality B/0, B/1, and C/0', () => {
+  /** @type {Array<[string, any, boolean]>} */
   const cases = [
     ['B/0', { score: 'B', issueCount: 0, reviewerIssueCount: 0 }, false],
     ['B/1', { score: 'B', issueCount: 1, reviewerIssueCount: 1 }, false],
     ['C/0', { score: 'C', issueCount: 0, reviewerIssueCount: 0 }, true],
   ];
+  /** @type {Array<[string, any]>} */
   const commands = [
     ['review', reviewHasFinalIssues],
     ['quality', qualityHasFinalIssues],

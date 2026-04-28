@@ -148,11 +148,11 @@ test('command option metadata keeps flags unique and option records immutable', 
 });
 
 test('stringOption reads explicit string values and falls back for boolean-style flags', () => {
-  const flags = new Map([
+  const flags = new Map(/** @type {Array<[string, string|boolean]>} */ ([
     ['model', 'gpt-5'],
     ['empty', ''],
     ['json', true],
-  ]);
+  ]));
 
   assert.equal(stringOption(flags, 'model', 'fallback'), 'gpt-5');
   assert.equal(stringOption(flags, 'empty', 'fallback'), '');
@@ -183,11 +183,11 @@ test('integer option helpers normalize valid values and fall back when absent', 
 });
 
 test('listOption splits comma-separated values and falls back for empty input', () => {
-  const flags = new Map([
+  const flags = new Map(/** @type {Array<[string, string|boolean]>} */ ([
     ['area', 'tests, maintainability,,security'],
     ['empty', ' , ,, '],
     ['json', true],
-  ]);
+  ]));
 
   assert.deepEqual(listOption(flags, 'area', ['default']), ['tests', 'maintainability', 'security']);
   assert.deepEqual(listOption(flags, 'empty', ['default']), ['default']);

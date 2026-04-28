@@ -55,6 +55,7 @@ import { safePathSegment } from './safe-path.js';
  *
  * @typedef {object} TaskStatusPayload
  * @property {string} id
+ * @property {ImplementationTask} [task]
  * @property {string} title
  * @property {string} state
  * @property {number} attempt
@@ -68,6 +69,7 @@ import { safePathSegment } from './safe-path.js';
  * @property {string} baselineRef
  * @property {string} baselineSha
  * @property {Array<string>} changedFiles
+ * @property {string} [patch]
  * @property {string} diffStat
  * @property {TaskWorktreeRemoval | null} cleanup
  * @property {string} error
@@ -80,6 +82,7 @@ import { safePathSegment } from './safe-path.js';
  *
  * @typedef {object} TaskResultPayload
  * @property {ImplementationTask} task
+ * @property {string} [id]
  * @property {string} provider
  * @property {string} text
  * @property {number} attempt
@@ -94,6 +97,9 @@ import { safePathSegment } from './safe-path.js';
  * @property {string} patch
  * @property {string} diffStat
  * @property {Array<string>} changedFiles
+ * @property {Array<string>} [files]
+ * @property {TaskWorktreeRemoval | null} [cleanup]
+ * @property {string} [error]
  */
 
 const ACTIVE_TASK_ARTIFACT_ROOT = 'tasks';

@@ -48,6 +48,10 @@ export function writeTestTypeCheckStatus({ testTypeCheckIncludes, writeOutput })
     writeOutput('Test type-checking is incremental: jsconfig does not include test files yet.');
     return;
   }
+  if (testTypeCheckIncludes.includes('test/**/*.js')) {
+    writeOutput('Test type-checking covers all test JavaScript files: test/**/*.js');
+    return;
+  }
 
   writeOutput(
     `Test type-checking is incremental: jsconfig includes ${count} test ${count === 1 ? 'path' : 'paths'}: ${testTypeCheckIncludes.join(', ')}`,

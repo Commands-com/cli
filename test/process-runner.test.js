@@ -9,8 +9,9 @@ import { PROCESS_KILL_GRACE_MS } from '../src/provider-limits.js';
 
 let mockedProcessRunnerImportId = 0;
 
+/** @param {{ kill?: (signal?: string) => boolean }} [options] @returns {any} */
 function createMockChild({ kill } = {}) {
-  const child = new EventEmitter();
+  const child = /** @type {any} */ (new EventEmitter());
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.stdin = new PassThrough();

@@ -41,6 +41,9 @@ export function cyclePromptArtifactPath(cycle, ...segments) {
   return buildArtifactPath({ cycle, prompt: true }, ...segments);
 }
 
+/**
+ * @param {{ artifactRoot: unknown, provider?: unknown, providerFile?: unknown, item?: unknown, itemFile?: unknown }} args
+ */
 export function providerItemArtifactDescriptor({
   artifactRoot,
   provider,
@@ -79,6 +82,9 @@ export function cycleProviderItemArtifactDescriptor({
   };
 }
 
+/**
+ * @param {{ artifactRoot: unknown, provider?: unknown, providerFile?: unknown, item?: unknown, itemFile?: unknown }} args
+ */
 export function providerItemResolvedArtifactPath({
   artifactRoot,
   provider,

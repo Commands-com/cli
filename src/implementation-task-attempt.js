@@ -52,6 +52,11 @@ class ImplementationTaskAttemptError extends Error {
   }
 }
 
+/**
+ * @param {unknown} error
+ * @param {import('./implementation-task-context.js').ImplementationTaskAttemptWorkspace | {}} [workspace]
+ * @returns {ImplementationTaskAttemptError}
+ */
 function decorateImplementationTaskAttemptError(error, workspace = {}) {
   if (error instanceof ImplementationTaskAttemptError) return error;
   return new ImplementationTaskAttemptError(error, { workspace });
@@ -83,12 +88,19 @@ function createAttemptBaselineDescriptor(baseline) {
   };
 }
 
+/**
+ * @param {unknown} [workspace]
+ * @returns {import('./implementation-task-context.js').ImplementationTaskAttemptWorkspace}
+ */
 function createAttemptWorkspaceDescriptor(workspace = {}) {
+  const workspaceRecord = /** @type {{ cwd?: string, worktree?: any, baseline?: any }} */ (
+    isObjectRecord(workspace) ? workspace : {}
+  );
   const {
     cwd,
     worktree = null,
     baseline,
-  } = isObjectRecord(workspace) ? workspace : {};
+  } = workspaceRecord;
   const normalizedWorktree = worktree || null;
   return {
     cwd: cwd ?? normalizedWorktree?.cwd ?? normalizedWorktree?.path,
@@ -97,6 +109,10 @@ function createAttemptWorkspaceDescriptor(workspace = {}) {
   };
 }
 
+/**
+ * @param {import('./implementation-task-context.js').ImplementationTaskRunContext} taskRunContext
+ * @returns {import('./implementation-task-context.js').ImplementationTaskAttemptWorkspace}
+ */
 function createInitialAttemptWorkspace(taskRunContext) {
   const { context } = implementationTaskWorkspace(taskRunContext);
   return createAttemptWorkspaceDescriptor({

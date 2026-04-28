@@ -354,23 +354,31 @@ test('type-check coverage guard catches a new src file outside include and allow
 test('maintainability check accepts recursive src check-js coverage', async (t) => {
   const repoRoot = await createTempRepo(t);
   await writeConfig(repoRoot, {
-    include: ['src/**/*.js'],
+    include: ['bin/**/*.js', 'src/**/*.js', 'test/**/*.js'],
     maintainabilityGuard: {
       maxRuntimeFileLines: 20,
-      typeCheckRoots: ['src'],
+      typeCheckRoots: ['bin', 'src'],
       typeCheckAllowlist: [],
     },
   });
+  await writeFile(path.join(repoRoot, 'bin', 'cli.js'), ['const cli = true;', 'void cli;']);
   await writeFile(path.join(repoRoot, 'src', 'index.js'), ['const index = true;', 'void index;']);
   await writeFile(path.join(repoRoot, 'src', 'nested', 'module.js'), [
     'const nested = true;',
     'void nested;',
   ]);
+  await writeFile(path.join(repoRoot, 'test', 'index.test.js'), ['const checked = true;', 'void checked;']);
 
-  const result = checkMaintainability({ repoRoot });
+  const stdout = [];
+  const result = checkMaintainability({
+    repoRoot,
+    writeOutput: (message) => stdout.push(message),
+  });
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.typeCheckMissingFiles, []);
+  assert.deepEqual(result.testTypeCheckIncludes, ['test/**/*.js']);
+  assert.deepEqual(stdout, ['Test type-checking covers all test JavaScript files: test/**/*.js']);
 });
 
 test('maintainability check rejects invalid type-check allowlist config', async (t) => {
@@ -509,6 +517,8 @@ test('repository maintainability guard has no unused export allowlist entries', 
 
   assert.deepEqual(guard.unusedExportAllowlist, []);
   assert.deepEqual(guard.unusedExportConsumerRoots, ['bin', 'src', 'test']);
+  assert.deepEqual(guard.typeCheckRoots, ['bin', 'src']);
+  assert.deepEqual(guard.typeCheckAllowlist, []);
 });
 
 async function createTempRepo(t) {

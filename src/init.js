@@ -2,6 +2,10 @@ import { initConfig } from './config.js';
 import { commandResult } from './command-result.js';
 import { stringOption } from './command-options.js';
 
+/**
+ * @param {any} parsed
+ * @param {{ cwd: string, logger?: any }} context
+ */
 export async function runInitCommand(parsed, { cwd, logger }) {
   if (!logger) {
     throw new Error('runInitCommand requires logger');

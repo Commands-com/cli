@@ -196,7 +196,7 @@ test('createCycleRecorder owns cycle records, prior findings, and record mutatio
     const state = localCycleState(cwd);
     const recorder = createCycleRecorder(state);
     const details = { issueCount: 0, score: 'B' };
-    const cycleRecord = recorder.beginCycle(1, details, { priorFindings: 'next findings' });
+    const cycleRecord = /** @type {any} */ (recorder.beginCycle(1, details, { priorFindings: 'next findings' }));
 
     assert.notEqual(cycleRecord, details);
     assert.deepEqual(cycleRecord, { cycle: 1, issueCount: 0, score: 'B' });
@@ -212,10 +212,10 @@ test('createCycleRecorder owns cycle records, prior findings, and record mutatio
         text: 'implementation text',
       },
     });
-    assert.equal(cycleRecord.implementationPlan, 'implementation plan');
-    assert.deepEqual(cycleRecord.implementationTasks, [{ id: 'task-1' }]);
-    assert.deepEqual(cycleRecord.implementationBatches, [['task-1']]);
-    assert.equal(cycleRecord.implementation, 'implementation text');
+    assert.equal(Reflect.get(cycleRecord, 'implementationPlan'), 'implementation plan');
+    assert.deepEqual(Reflect.get(cycleRecord, 'implementationTasks'), [{ id: 'task-1' }]);
+    assert.deepEqual(Reflect.get(cycleRecord, 'implementationBatches'), [['task-1']]);
+    assert.equal(Reflect.get(cycleRecord, 'implementation'), 'implementation text');
 
     recorder.applyImplementationResult(cycleRecord, {
       testResult: { ok: false, exitCode: 17 },
@@ -223,7 +223,7 @@ test('createCycleRecorder owns cycle records, prior findings, and record mutatio
       testFailureUpdates: { score: 'F' },
     });
     assert.equal(cycleRecord.issueCount, 1);
-    assert.equal(cycleRecord.testIssueCount, 1);
+    assert.equal(Reflect.get(cycleRecord, 'testIssueCount'), 1);
     assert.equal(cycleRecord.score, 'F');
     assert.equal(state.hasUnresolvedTestFailure, true);
 

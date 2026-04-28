@@ -63,7 +63,7 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  * Parsed command shape consumed by cycle workflows.
  *
  * @typedef {Object} ParsedCycleCommand
- * @property {Object<string, string|boolean|Array<string>>} flags Parsed CLI flags.
+ * @property {Map<string, string|boolean>|Object<string, string|boolean|Array<string>>} flags Parsed CLI flags.
  * @property {Array<string>} [positionals] Parsed positional args.
  */
 
@@ -92,7 +92,7 @@ export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
  * @property {string} label Human-readable run label.
  * @property {Object} [metadata] Extra metadata persisted with the run.
  * @property {CycleLogger} logger Command logger.
- * @property {AssessmentCycleAdapter} adapter Assessment adapter executed by each cycle.
+ * @property {AssessmentCycleAdapter|Object} adapter Assessment adapter executed by each cycle.
  * @property {RunCycleWorkflowDependencies} [dependencies] Optional test seams.
  */
 
@@ -245,7 +245,7 @@ export async function runCycleWorkflow(parsed, {
     }
 
     if (!resume) {
-      await writeRunSetupArtifacts(store, state.context, {
+      await writeRunSetupArtifacts(store, /** @type {import('./git.js').RepoContext} */ (state.context), {
         kind,
         provider: options.primaryProvider.id,
         providers: options.providerIds,

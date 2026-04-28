@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { runCyclePreflight } from '../src/cycle-preflight.js';
 import { memoryStore } from './support/memory-store.js';
 
+/** @param {any} args @returns {any} */
 function testState({
   status = '',
   options = {},
 } = {}) {
   const store = memoryStore();
   const logs = [];
-  return {
+  return /** @type {any} */ ({
     store,
     logs,
     context: { status },
@@ -28,7 +29,7 @@ function testState({
       testCommand: '',
       ...options,
     },
-  };
+  });
 }
 
 test('runCyclePreflight writes a passing preflight payload', async () => {

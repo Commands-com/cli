@@ -75,6 +75,7 @@ async function writeGenericProviderText(binDir, commandName, text) {
   return provider;
 }
 
+/** @param {any} options @returns {any} */
 function createFakeAdapter({
   outputIssueCount = 0,
   synthesisIssueCount = outputIssueCount,

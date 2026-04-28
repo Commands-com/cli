@@ -32,11 +32,13 @@ test('buildSpawnTarget routes Windows cmd and bat shims through cmd.exe', () => 
 });
 
 test('buildSpawnTarget does not shell non-shim commands or non-Windows cmd files', () => {
-  for (const { command, platform } of [
+  /** @type {Array<{ command: string, platform: NodeJS.Platform }>} */
+  const cases = [
     { command: 'C:\\npm\\provider.exe', platform: 'win32' },
     { command: 'C:\\npm\\provider', platform: 'win32' },
     { command: '/usr/local/bin/provider.cmd', platform: 'darwin' },
-  ]) {
+  ];
+  for (const { command, platform } of cases) {
     const target = buildSpawnTarget({ command, args: [] }, platform);
 
     assert.equal(target.command, command);

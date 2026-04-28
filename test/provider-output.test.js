@@ -226,8 +226,9 @@ test('provider output parsing handles malformed and partial payloads without thr
     assert.doesNotThrow(() => {
       details = providerFailureDetails({ id: providerId }, stdout, '', 200);
     }, `${label} diagnostics`);
-    assert.equal(typeof details, 'string', label);
-    assert.ok(details.length > 0, label);
+    const diagnostics = /** @type {string} */ (details);
+    assert.equal(typeof diagnostics, 'string', label);
+    assert.ok(diagnostics.length > 0, label);
   }
 });
 

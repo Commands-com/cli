@@ -13,11 +13,13 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @typedef {Object} CycleRepoContext
  * @property {string} repoRoot Repository root for command execution.
  * @property {string} [gitRoot] Git worktree root when available.
+ * @property {boolean} [isGit] Whether the context came from a Git repository.
  * @property {string} [branch] Current branch name.
  * @property {string} [head] Current short commit sha.
  * @property {string} [status] Porcelain status text.
  * @property {string} [diffStat] Diff stat text.
  * @property {string} [diff] Diff text for changed-only follow-up cycles.
+ * @property {string} [diffError] Diff collection diagnostic, when available.
  */
 
 /**
@@ -38,12 +40,19 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {string} [dir] Artifact root directory.
  * @property {(name: string, content: string) => Promise<string>} write
  * @property {(name: string, value: *) => Promise<string>} [writeJson]
+ * @property {*} [writes] Test/support stores may expose captured writes.
  */
 
 /**
  * @typedef {Object} CycleLogger
+ * @property {string} [kind] Logger scope.
  * @property {boolean} [jsonMode] Whether human-readable output is suppressed.
- * @property {(message: string) => void} info
+ * @property {(kind: string) => CycleLogger} [child]
+ * @property {(message: string) => void} [line]
+ * @property {(message: string) => void} [info]
+ * @property {(message: string) => void} [warn]
+ * @property {(payload: *) => void} [json]
+ * @property {(message: string) => void} [error]
  */
 
 /**
@@ -73,6 +82,9 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {string} [resume] Run id or path resumed by this invocation.
  * @property {string} [untilScore] Optional target review/quality score for stop handling.
  * @property {string} [testCommand] Optional validation command.
+ * @property {*} [customOption] Test/adapters may carry extra option fields.
+ * @property {*} [customAdapterOption] Test/adapters may carry extra option fields.
+ * @property {*} [runtimeOptions] Extra nested option data is preserved as ordinary owned options.
  */
 
 /**
@@ -104,6 +116,9 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {string} [implementation] Rendered implementation summary.
  * @property {{ ok: boolean, exitCode: number }} [test] Validation command result.
  * @property {number} [testIssueCount] Issue count contributed by a failing validation run.
+ * @property {number} [outputIssueCount] Adapter-specific pre-synthesis issue count.
+ * @property {string} [source] Adapter-specific summary source marker.
+ * @property {boolean} [usedOutputSummary] Adapter-specific fallback marker.
  */
 
 /** @typedef {CycleRecordBase} CycleRecord */
@@ -141,12 +156,12 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * while mutation stays with the workflow runner.
  *
  * @typedef {Object} CycleRunContext
- * @property {string} kind Workflow kind such as `review` or `quality`.
- * @property {CycleStore} store Artifact store.
- * @property {CycleRepoContext} context Current repository context.
+ * @property {string} [kind] Workflow kind such as `review` or `quality`.
+ * @property {CycleStore} [store] Artifact store.
+ * @property {CycleRepoContext} [context] Current repository context.
  * @property {CycleRuntimeOptions} options Runtime options owned by this state.
- * @property {CycleLogger} logger Command logger.
- * @property {string} priorFindings Findings carried into the current cycle.
+ * @property {CycleLogger} [logger] Command logger.
+ * @property {string} [priorFindings] Findings carried into the current cycle.
  * @property {boolean} hasUnresolvedTestFailure Whether validation failed after implementation.
  */
 
@@ -158,7 +173,7 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {CycleStore} store Artifact store.
  * @property {CycleWorkspace} workspace Active workspace.
  * @property {CycleRepoContext} context Current repository context.
- * @property {CycleLogger} logger Command logger.
+ * @property {CycleLogger} [logger] Command logger.
  * @property {Object} fanoutRuntimeOptions Normalized fan-out option subset.
  * @property {Record<string, string>} providerSessions Provider session ids keyed by phase/provider/item.
  * @property {Object} synthesisRuntimeOptions Normalized synthesis option subset.
@@ -181,18 +196,18 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * dependencies instead of accepting this whole object.
  *
  * @typedef {Object} CycleState
- * @property {string} kind Workflow kind such as `review` or `quality`.
+ * @property {string} [kind] Workflow kind such as `review` or `quality`.
  * @property {CycleStore} store Artifact store.
  * @property {CycleWorkspace} workspace Active workspace.
- * @property {CycleRepoContext} context Current repository context.
+ * @property {CycleRepoContext} [context] Current repository context.
  * @property {CycleRuntimeOptions} options Runtime options owned by this state.
- * @property {CycleLogger} logger Command logger.
+ * @property {CycleLogger} [logger] Command logger.
  * @property {Array<CycleRecord>} cycles Stored cycle records.
- * @property {Record<string, string>} providerSessions Provider session ids carried across cycles.
- * @property {string} priorFindings Findings carried into the next cycle.
+ * @property {Record<string, string>} [providerSessions] Provider session ids carried across cycles.
+ * @property {string} [priorFindings] Findings carried into the next cycle.
  * @property {boolean} hasUnresolvedTestFailure Whether validation failed after implementation.
- * @property {number} stalledCycles Consecutive repeated no-progress cycles.
- * @property {string} stopReason Why the loop stopped when it did not naturally converge.
+ * @property {number} [stalledCycles] Consecutive repeated no-progress cycles.
+ * @property {string} [stopReason] Why the loop stopped when it did not naturally converge.
  */
 
 /**
@@ -211,8 +226,10 @@ import { normalizeFiniteNonNegativeNumber } from './number-utils.js';
  * @property {boolean} [hasUnresolvedTestFailure] Whether validation failed after implementation.
  * @property {number} [stalledCycles] Consecutive repeated no-progress cycles.
  * @property {string} [stopReason] Why the loop stopped when it did not naturally converge.
+ *
+ * @param {CreateCycleStateArgs} args
+ * @returns {CycleState}
  */
-
 export function createCycleState({
   kind,
   store,

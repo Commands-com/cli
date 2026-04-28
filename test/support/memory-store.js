@@ -1,3 +1,14 @@
+/**
+ * @param {{
+ *   runId?: string,
+ *   dir?: string,
+ *   writeTracking?: 'list'|'map'|'none'|false,
+ *   onWrite?: (record: object) => void,
+ *   writeJson?: boolean,
+ *   valueKey?: string,
+ *   stringifyWrites?: boolean,
+ * }} [options]
+ */
 export function memoryStore({
   runId = 'run-1',
   dir = '',

@@ -49,6 +49,7 @@ function memoryArtifacts(events = []) {
   return {
     promptPath: 'prompt.md',
     outputPath: 'output.md',
+    path: 'output.md',
     async writePrompt(prompt) {
       events.push({ method: 'writePrompt', text: prompt });
     },
@@ -79,14 +80,14 @@ test('runProviderItem validates required artifact writers', async () => {
   await assert.rejects(
     runProviderItem({
       ...baseArgs,
-      artifacts: { writeOutput() {} },
+      artifacts: /** @type {any} */ ({ writeOutput() {} }),
     }),
     /runProviderItem requires artifacts\.writePrompt/,
   );
   await assert.rejects(
     runProviderItem({
       ...baseArgs,
-      artifacts: { writePrompt() {} },
+      artifacts: /** @type {any} */ ({ writePrompt() {} }),
     }),
     /runProviderItem requires artifacts\.writeOutput/,
   );
@@ -125,6 +126,7 @@ test('runProviderItem writes the prompt before provider execution and output aft
       artifacts: {
         promptPath,
         outputPath,
+        path: outputPath,
         async writePrompt(value) {
           await fs.writeFile(promptPath, value, 'utf8');
           await fs.appendFile(eventsPath, 'prompt\n', 'utf8');

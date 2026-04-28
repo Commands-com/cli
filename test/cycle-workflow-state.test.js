@@ -24,6 +24,7 @@ function testStore() {
   };
 }
 
+/** @param {any} [options] @returns {any} */
 function testOptions(options = {}) {
   const providers = options.providers || [{ id: 'mock' }];
   return {
@@ -77,7 +78,7 @@ test('createCycleState owns raw command options under state.options', () => {
   assert.equal(state.options.maxCycles, 3);
   assert.equal(state.options.testCommand, 'npm test');
   assert.equal(state.options.customOption, 'preserved');
-  assert.equal(state.runtimeOptions, undefined);
+  assert.equal(Reflect.get(state, 'runtimeOptions'), undefined);
   assert.equal(Object.hasOwn(state, 'runtimeOptions'), false);
   for (const optionKey of [
     'providers',
@@ -90,7 +91,7 @@ test('createCycleState owns raw command options under state.options', () => {
     'maxCycles',
     'testCommand',
   ]) {
-    assert.equal(state[optionKey], undefined);
+    assert.equal(Reflect.get(state, optionKey), undefined);
     assert.equal(optionKey in state, false);
     assert.equal(Object.keys(state).includes(optionKey), false);
   }
@@ -114,7 +115,7 @@ test('createCycleState preserves nested runtimeOptions only under owned options'
   });
 
   assert.deepEqual(state.options.runtimeOptions, { model: 'unused' });
-  assert.equal(state.runtimeOptions, undefined);
+  assert.equal(Reflect.get(state, 'runtimeOptions'), undefined);
   assert.equal(Object.hasOwn(state, 'runtimeOptions'), false);
 });
 
@@ -123,12 +124,12 @@ test('createCyclePhaseView projects state.options for fan-out', async () => {
     providers: [{ id: 'mock' }],
     json: true,
   });
-  state.providers = [];
-  state.parallel = true;
-  state.model = 'stale-model';
-  state.timeoutMs = 1;
-  state.providerRetries = 99;
-  state.json = false;
+  Reflect.set(state, 'providers', []);
+  Reflect.set(state, 'parallel', true);
+  Reflect.set(state, 'model', 'stale-model');
+  Reflect.set(state, 'timeoutMs', 1);
+  Reflect.set(state, 'providerRetries', 99);
+  Reflect.set(state, 'json', false);
 
   const phaseView = createCyclePhaseView(state);
   const { outputs } = await runAssessmentProviderFanout(phaseView, {
@@ -176,14 +177,14 @@ test('cycle phase view reads from state.options without widening state', () => {
     customOption: 'preserved',
     runtimeOptions: { shouldNotLeak: true },
   });
-  state.providers = [{ id: 'stale-provider' }];
-  state.primaryProvider = { id: 'stale-provider' };
-  state.model = 'stale-model';
-  state.timeoutMs = 1;
-  state.providerRetries = 99;
-  state.runtimeOptions = {
-    providers: [{ id: 'legacy-provider' }],
-  };
+  Reflect.set(state, 'providers', [{ id: 'stale-provider' }]);
+  Reflect.set(state, 'primaryProvider', { id: 'stale-provider' });
+  Reflect.set(state, 'model', 'stale-model');
+  Reflect.set(state, 'timeoutMs', 1);
+  Reflect.set(state, 'providerRetries', 99);
+  Reflect.set(state, 'runtimeOptions', {
+    providers: [{ id: 'stale-provider' }],
+  });
 
   const view = createCyclePhaseView(state);
 

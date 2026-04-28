@@ -10,6 +10,7 @@ import { createImplementationTaskRunContext } from '../src/implementation-task-c
 import { collectRepoContext } from '../src/git.js';
 import { fileStore, initGitRepo } from './support/git.js';
 
+/** @param {any} args @returns {any} */
 function taskRunContext({
   provider = { id: 'mock' },
   store,
@@ -407,6 +408,7 @@ test('runImplementationTask preserves worktree error metadata on terminal failur
   try {
     const store = fileStore(storeRoot, 'unit-error-metadata-run');
     const context = await collectRepoContext(tmp);
+    /** @type {any} */
     let failure;
     await assert.rejects(
       async () => {

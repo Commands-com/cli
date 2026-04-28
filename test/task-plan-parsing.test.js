@@ -167,7 +167,7 @@ test('parseImplementationPlan caps tasks with explicit maxTasks handling', () =>
     parseImplementationPlan(text, { maxTasks: 0 }).map((task) => task.id),
     ['task-1'],
   );
-  assert.equal(parseImplementationPlan(text, { maxTasks: 'invalid' }).length, 6);
+  assert.equal(parseImplementationPlan(text, /** @type {any} */ ({ maxTasks: 'invalid' })).length, 6);
 });
 
 test('buildImplementationBatches groups only non-overlapping tasks', () => {

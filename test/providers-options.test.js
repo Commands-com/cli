@@ -133,12 +133,14 @@ test('buildSpawnTarget shells out only for Windows .cmd/.bat shims', () => {
     assert.equal(target.windowsVerbatimArguments, true);
   }
 
-  for (const { command, platform } of [
+  /** @type {Array<{ command: string, platform: NodeJS.Platform }>} */
+  const cases = [
     { command: 'C:\\npm\\gemini.exe', platform: 'win32' },
     { command: 'C:\\npm\\gemini', platform: 'win32' },
     { command: '/usr/local/bin/gemini.cmd', platform: 'linux' },
     { command: '/usr/local/bin/gemini', platform: 'darwin' },
-  ]) {
+  ];
+  for (const { command, platform } of cases) {
     const target = buildSpawnTarget({ command, args: [] }, platform);
     assert.equal(target.command, command);
     assert.equal(target.windowsVerbatimArguments, false);

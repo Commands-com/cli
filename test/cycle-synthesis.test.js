@@ -148,7 +148,7 @@ test('runProviderSynthesisWithFallback preserves fallback text for non-Error fai
       providerRetries: 0,
       cwd: process.cwd(),
     },
-    artifacts: {
+    artifacts: /** @type {any} */ ({
       writePrompt() {
         return Promise.reject('plain synthesis failure');
       },
@@ -158,7 +158,7 @@ test('runProviderSynthesisWithFallback preserves fallback text for non-Error fai
       writeError() {
         throw new Error('writeError should not run');
       },
-    },
+    }),
     logging: {
       logger,
       prefix: 'cycle 4: ',
@@ -311,12 +311,12 @@ test('runProviderSynthesisWithFallback requires structured artifact writers', as
           providerRetries: 0,
           cwd,
         },
-        artifacts: {
+        artifacts: /** @type {any} */ ({
           store: localStore(path.join(cwd, 'store')),
           promptPath: 'prompts/synthesis-mock.md',
           outputPath: 'synthesis.md',
           errorPath: 'synthesis-error.md',
-        },
+        }),
         prompt: 'Synthesize provider outputs.',
         fallbackDescription: 'provider outputs',
       }),

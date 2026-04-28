@@ -159,6 +159,28 @@ async function runImplementationBatch({
   };
 }
 
+/**
+ * @param {{
+ *   provider: any,
+ *   providers?: Array<any>,
+ *   store: any,
+ *   cycle: any,
+ *   objective: any,
+ *   findings: any,
+ *   context: any,
+ *   workspace?: any,
+ *   testCommand?: string,
+ *   model?: string,
+ *   timeoutMs: any,
+ *   maxImplementers?: number,
+ *   parallel?: boolean,
+ *   retries?: number,
+ *   retryDelayMs?: any,
+ *   logger?: { info(message?: string): void },
+ *   logPrefix?: string,
+ *   json?: boolean,
+ * }} args
+ */
 export async function runOrchestratedImplementationPhase({
   provider,
   providers = [],

@@ -8,13 +8,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { PROVIDER_PING_MARKER, runMockProvider } from '../src/mock-provider.js';
-import { appendCapped, extractProviderText, providerFailureDetails } from '../src/provider-output.js';
+import { extractProviderText, providerFailureDetails } from '../src/provider-output.js';
 import { PROCESS_KILL_GRACE_MS } from '../src/provider-limits.js';
 import { isTransientProviderError, runProviderWithRetry as runProviderWithRetryPolicy } from '../src/provider-retry.js';
 import { runProvider, runProviderWithRetry } from '../src/providers.js';
 
+/** @param {{ kill?: (signal?: string) => boolean }} [options] @returns {any} */
 function createMockChild({ kill } = {}) {
-  const child = new EventEmitter();
+  const child = /** @type {any} */ (new EventEmitter());
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.stdin = new PassThrough();
@@ -426,6 +427,7 @@ test('runProvider tags timeout errors so isTransientProviderError treats them as
   await fs.writeFile(bin, '#!/bin/sh\nsleep 1\n', 'utf8');
   await fs.chmod(bin, 0o755);
   try {
+    /** @type {any} */
     let captured;
     await assert.rejects(
       runProvider(
@@ -648,45 +650,4 @@ test('runProviderWithRetry applies linear retryDelayMs backoff progression', asy
   ]);
   assert.equal(attempts, 4);
   assert.equal(result.text, 'ok');
-});
-
-test('appendCapped honors the byte cap without splitting multi-byte UTF-8', () => {
-  // 'é' is 2 bytes (0xC3 0xA9); naive mid-sequence slicing would emit U+FFFD
-  // (3 bytes) and push the result back over the cap.
-  const r1 = appendCapped('', 'é', 1);
-  assert.equal(r1.truncated, true);
-  assert.ok(Buffer.byteLength(r1.value, 'utf8') <= 1);
-  assert.ok(!r1.value.includes('�'));
-
-  const r2 = appendCapped('', 'héllo', 2);
-  assert.equal(r2.value, 'h');
-  assert.ok(Buffer.byteLength(r2.value, 'utf8') <= 2);
-
-  const r3 = appendCapped('', 'héllo', 3);
-  assert.equal(r3.value, 'hé');
-  assert.ok(Buffer.byteLength(r3.value, 'utf8') <= 3);
-
-  const r4 = appendCapped('', 'hello', 10);
-  assert.equal(r4.truncated, false);
-  assert.equal(r4.value, 'hello');
-});
-
-test('appendCapped handles binary UTF-8 chunks without replacement characters', () => {
-  const face = String.fromCodePoint(0x1F600);
-  const chunk = Buffer.from(`A${face}B`, 'utf8');
-
-  const r1 = appendCapped('', chunk, 4);
-  assert.equal(r1.truncated, true);
-  assert.equal(r1.value, 'A');
-  assert.ok(!r1.value.includes('\uFFFD'));
-
-  const r2 = appendCapped('', chunk, 5);
-  assert.equal(r2.truncated, true);
-  assert.equal(r2.value, `A${face}`);
-  assert.ok(!r2.value.includes('\uFFFD'));
-
-  const r3 = appendCapped('', Buffer.from([0xF0, 0x9F]), 2);
-  assert.equal(r3.truncated, true);
-  assert.equal(r3.value, '');
-  assert.ok(!r3.value.includes('\uFFFD'));
 });

@@ -165,7 +165,8 @@ test('listRuns renders runs missing metadata.json as empty rows', async () => {
     const logger = await runRunsWithLogger(cwd, ['list'], { jsonMode: false });
 
     assert.equal(payload.runs.length, 1);
-    assert.deepEqual(payload.runs[0], {
+    const run = /** @type {any} */ (payload.runs[0]);
+    assert.deepEqual(run, {
       runId,
       dir: path.join(cwd, '.commands-com', 'runs', runId),
       kind: '',
@@ -173,7 +174,7 @@ test('listRuns renders runs missing metadata.json as empty rows', async () => {
       provider: '',
       createdAt: '',
     });
-    assert.equal(payload.runs[0].metadataError, undefined);
+    assert.equal(Reflect.get(run, 'metadataError'), undefined);
     assert.deepEqual(logger.lines, [runId]);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });

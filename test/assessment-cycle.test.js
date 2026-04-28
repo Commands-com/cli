@@ -134,6 +134,7 @@ test('runCycleWorkflow persists resolved cycle option metadata', async () => {
   }
 });
 
+/** @param {any} options @returns {any} */
 function createFakeAdapter({
   outputIssueCount = 0,
   synthesisIssueCount = outputIssueCount,

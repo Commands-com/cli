@@ -162,15 +162,15 @@ test('scopedWorktreeCwd keeps in-repo scopes that happen to start with dot-dot',
   const isolated = { path: path.join(volumeRoot, 'tmp', 'commands-worktree') };
 
   assert.equal(
-    scopedWorktreeCwd({ gitRoot, repoRoot: path.join(gitRoot, '..pkg') }, isolated),
+    scopedWorktreeCwd(/** @type {any} */ ({ gitRoot, repoRoot: path.join(gitRoot, '..pkg') }), /** @type {any} */ (isolated)),
     path.join(isolated.path, '..pkg'),
   );
   assert.equal(
-    scopedWorktreeCwd({ gitRoot, repoRoot: path.join(gitRoot, 'packages', 'app') }, isolated),
+    scopedWorktreeCwd(/** @type {any} */ ({ gitRoot, repoRoot: path.join(gitRoot, 'packages', 'app') }), /** @type {any} */ (isolated)),
     path.join(isolated.path, 'packages', 'app'),
   );
   assert.equal(
-    scopedWorktreeCwd({ gitRoot, repoRoot: path.resolve(gitRoot, '..', 'outside-repo') }, isolated),
+    scopedWorktreeCwd(/** @type {any} */ ({ gitRoot, repoRoot: path.resolve(gitRoot, '..', 'outside-repo') }), /** @type {any} */ (isolated)),
     isolated.path,
   );
 });
@@ -179,6 +179,7 @@ test('runCycleWorkflow prunes unchanged isolated worktrees when cycle execution 
   skip: process.platform === 'win32',
 }, async () => {
   const cwd = await tempDir('commands-com-workflow-');
+  /** @type {any} */
   let workspace;
   try {
     await initGitRepo(cwd);
@@ -213,6 +214,7 @@ test('runCycleWorkflow prunes unchanged isolated worktrees when cycle execution 
       /cycle failed after worktree setup/,
     );
 
+    assert.ok(workspace);
     assert.equal(workspace.mode, 'worktree');
     assert.equal(workspace.diffStatus.hasChanges, false);
     assert.equal(workspace.prune.ok, true);

@@ -117,6 +117,6 @@ test('scopedWorktreeCwd resolves only safe scopes beneath the original git root'
   ];
 
   for (const { name, context, expected } of cases) {
-    assert.equal(scopedWorktreeCwd(context, isolated), expected, name);
+    assert.equal(scopedWorktreeCwd(/** @type {any} */ (context), /** @type {any} */ (isolated)), expected, name);
   }
 });

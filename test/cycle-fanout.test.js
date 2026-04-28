@@ -14,13 +14,14 @@ import {
 import { cycleArtifactOptions } from './support/cycle-artifact-fixtures.js';
 import { memoryStore } from './support/memory-store.js';
 
+/** @param {any} args @returns {any} */
 function testState({
   providers = [{ id: 'mock' }],
   parallel = false,
   logger,
 } = {}) {
   const provider = providers[0];
-  return createCycleState({
+  return /** @type {any} */ (createCycleState({
     kind: 'quality',
     store: memoryStore(),
     workspace: { mode: 'current', cwd: '/repo' },
@@ -39,16 +40,17 @@ function testState({
       jsonMode: false,
       info() {},
     },
-  });
+  }));
 }
 
+/** @param {any} args @returns {any} */
 function fanoutDependencies({
   store = memoryStore(),
   logger = {},
   providers = [{ id: 'mock' }],
   fanoutParallel,
 } = {}) {
-  return {
+  return /** @type {any} */ ({
     context: { repoRoot: '/repo' },
     store,
     logger,
@@ -59,7 +61,7 @@ function fanoutDependencies({
       providerRetries: 0,
       ...(fanoutParallel === undefined ? {} : { fanoutParallel }),
     },
-  };
+  });
 }
 
 test('runAssessmentProviderFanout normalizes primitive items for prompts, artifacts, and hooks', async () => {

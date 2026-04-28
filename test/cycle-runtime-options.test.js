@@ -9,7 +9,7 @@ function phaseState(options) {
   return createCycleState({
     kind: 'quality',
     context: { repoRoot: '/repo' },
-    store: { async write() {} },
+    store: { async write() { return ''; } },
     workspace: { mode: 'current', cwd: '/repo' },
     logger: { info() {} },
     options,

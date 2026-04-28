@@ -46,6 +46,7 @@ async function withTempDir(prefix, fn) {
   }
 }
 
+/** @param {any} args */
 function createTaskMergeRunContext({
   store, cycle = 1, context, workspace,
   provider = { id: 'mock-provider' }, assignment = {},

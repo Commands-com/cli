@@ -19,7 +19,7 @@ function sampleInputs() {
       logPrefix: 'slice',
     },
     taskWorkspace: {
-      store: { runId: 'slice-run' },
+      store: { runId: 'slice-run', async write() { return ''; } },
       cycle: 3,
       context: { repoRoot: '/repo' },
       workspace: { mode: 'current', cwd: '/repo' },

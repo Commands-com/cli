@@ -82,8 +82,12 @@ function buildRoomSynthesisPrompt({ room, objective, outputs }) {
 }
 
 /**
- * @typedef {ReturnType<typeof import('./args.js').parseArgs>} ParsedCommand
- * @typedef {{ cwd?: string, logger?: ReturnType<typeof createCommandLogger>, helpText?: string }} RoomCommandContext
+ * @typedef {Object} ParsedCommand
+ * @property {string} [command]
+ * @property {string[]} positionals
+ * @property {Map<string, string|boolean>|Object<string, string|boolean|Array<string>>} flags
+ * @typedef {{ jsonMode?: boolean, line?: (message: string) => void, info?: (message: string) => void, json?: (payload: *) => void, error?: (message: string) => void }} RoomLogger
+ * @typedef {{ cwd?: string, logger?: RoomLogger, helpText?: string }} RoomCommandContext
  */
 
 /**

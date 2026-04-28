@@ -21,11 +21,11 @@ const TASK_WORKTREE_WORKSPACE_MODE = 'task-worktree';
  *
  * @typedef {object} TaskWorktree
  * @property {string} path Absolute path to the task worktree root.
- * @property {number} attempt One-based attempt index this worktree was created for.
- * @property {string} baseRef Base ref the worktree was branched from.
- * @property {string} baseSha Resolved sha for `baseRef` at creation time.
+ * @property {number} [attempt] One-based attempt index this worktree was created for.
+ * @property {string} [baseRef] Base ref the worktree was branched from.
+ * @property {string} [baseSha] Resolved sha for `baseRef` at creation time.
  * @property {string} cwd Provider-facing cwd inside the worktree.
- * @property {string} managerCwd Integration cwd used to manage the worktree.
+ * @property {string} [managerCwd] Integration cwd used to manage the worktree.
  */
 
 /**
@@ -63,8 +63,9 @@ const TASK_WORKTREE_WORKSPACE_MODE = 'task-worktree';
  * Result returned by `removeTaskWorktree`.
  *
  * @typedef {object} TaskWorktreeRemoval
- * @property {boolean} ok Whether the worktree was removed cleanly.
+ * @property {boolean} [ok] Whether the worktree was removed cleanly.
  * @property {string} [error] Error text when removal failed.
+ * @property {boolean} [removed] Fixture field used by status tests.
  */
 
 /**
@@ -73,7 +74,7 @@ const TASK_WORKTREE_WORKSPACE_MODE = 'task-worktree';
  * @typedef {object} ImplementationTask
  * @property {string} id Stable task id used in artifacts and logs.
  * @property {string} title Human-readable task title.
- * @property {Array<string>} files Assigned file scope (relative paths).
+ * @property {Array<string>} [files] Assigned file scope (relative paths).
  * @property {string} [instructions] Task instructions for the implementer.
  * @property {number} [order] One-based execution order.
  */
@@ -81,15 +82,14 @@ const TASK_WORKTREE_WORKSPACE_MODE = 'task-worktree';
 /**
  * Per-attempt workspace descriptor used by implementer execution. `cwd`
  * is where the provider runs; `worktree`/`baseline` are present when
- * `useTaskWorktrees` is true. The descriptor produced by
- * `createAttemptWorkspaceDescriptor` always sets these properties (even
- * if their values are `undefined`/`null`), so they are typed as required
- * with broadened value types rather than as optional properties.
+ * `useTaskWorktrees` is true. Tests may construct partial descriptors
+ * around malformed/error states, so these fields stay optional at the
+ * typedef boundary.
  *
  * @typedef {object} ImplementationTaskAttemptWorkspace
- * @property {string | undefined} cwd Provider cwd (scoped to repo-relative path).
- * @property {TaskWorktree | null} worktree Task worktree handle, when used.
- * @property {TaskBaseline} baseline Baseline established inside the worktree.
+ * @property {string} [cwd] Provider cwd (scoped to repo-relative path).
+ * @property {TaskWorktree | null} [worktree] Task worktree handle, when used.
+ * @property {TaskBaseline} [baseline] Baseline established inside the worktree.
  * @property {string} [mode] Workspace mode marker (e.g. `'task-worktree'`).
  * @property {string} [originalRepoRoot] Original repo root, when running in an isolated worktree.
  */

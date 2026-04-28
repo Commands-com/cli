@@ -64,7 +64,7 @@ caller passed the option's flag explicitly.
 - **`--max-cycles` fallback ordering.** The `--max-cycles` fallback
   reads already-resolved sibling fields (`fix`, `untilScore`) via the
   `resolveOptionFallback` context, so the reader must preserve schema
-  declaration order. Covered by `test/command-option-resolver.test.js`
+  declaration order. Covered by `test/command-option-resolution.test.js`
   and `test/cycle-workflow.test.js`'s mode-recompute test.
 
 ## Stale stored fields

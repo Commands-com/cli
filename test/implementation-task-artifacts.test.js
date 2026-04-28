@@ -8,11 +8,12 @@ import {
   writeTaskState,
 } from '../src/implementation-task-artifacts.js';
 
+/** @param {any} args @returns {any} */
 function taskRunContext({ provider = { id: 'slice-provider' }, store, cycle = 2 } = {}) {
-  return {
+  return /** @type {any} */ ({
     execution: { provider },
     taskWorkspace: { store, cycle },
-  };
+  });
 }
 
 test('writeTaskErrorArtifacts writes formatted failure messages', async () => {
@@ -141,7 +142,7 @@ test('writeTaskState writes the current task status schema', async () => {
     error: new Error('status failed'),
     cleanup: { removed: false },
   });
-  const { updatedAt, ...stableStatus } = status;
+  const { updatedAt, ...stableStatus } = /** @type {any} */ (status);
 
   assert.match(updatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(stableStatus, {
@@ -209,7 +210,7 @@ test('writeTaskState writes current status fields to task status artifacts', asy
     patchInfo,
     writeAttemptStatus: true,
   });
-  const { updatedAt, ...stableStatus } = status;
+  const { updatedAt, ...stableStatus } = /** @type {any} */ (status);
 
   assert.match(updatedAt, /^\d{4}-\d{2}-\d{2}T/);
   assert.deepEqual(writes.map(({ file }) => file), [
@@ -240,7 +241,7 @@ test('writeTaskState writes current status fields to task status artifacts', asy
     cleanup: null,
     error: '',
   });
-  assert.equal(stableStatus.patch, undefined);
+  assert.equal(Reflect.get(stableStatus, 'patch'), undefined);
 });
 
 test('taskResultPayload returns the structured result schema for merge consumers', () => {
@@ -264,7 +265,7 @@ test('taskResultPayload returns the structured result schema for merge consumers
     files: ['src/schema.js'],
   };
 
-  const result = taskResultPayload({
+  const result = /** @type {any} */ (taskResultPayload({
     taskRunContext: taskRunContext({ provider: { id: 'schema-provider' } }),
     task,
     text: 'done',
@@ -272,7 +273,7 @@ test('taskResultPayload returns the structured result schema for merge consumers
     worktree,
     baseline,
     patchInfo,
-  });
+  }));
 
   assert.deepEqual(result, {
     task,
@@ -291,10 +292,10 @@ test('taskResultPayload returns the structured result schema for merge consumers
     diffStat: 'src/schema.js | 1 +',
     changedFiles: ['src/schema.js'],
   });
-  assert.equal(result.id, undefined);
-  assert.equal(result.files, undefined);
-  assert.equal(result.cleanup, undefined);
-  assert.equal(result.error, undefined);
+  assert.equal(Reflect.get(result, 'id'), undefined);
+  assert.equal(Reflect.get(result, 'files'), undefined);
+  assert.equal(Reflect.get(result, 'cleanup'), undefined);
+  assert.equal(Reflect.get(result, 'error'), undefined);
 });
 
 test('writeTaskState reads store and cycle from the taskWorkspace slice', async () => {

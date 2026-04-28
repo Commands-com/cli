@@ -12,9 +12,10 @@ import {
   selectQualityFinalCycleWithFallback,
 } from '../src/assessment-report.js';
 
+/** @param {any} overrides @returns {any} */
 function baseState(overrides = {}) {
   const { options = {}, ...stateOverrides } = overrides;
-  return {
+  return /** @type {any} */ ({
     store: { runId: 'run-id' },
     options: {
       providerIds: ['codex'],
@@ -27,7 +28,7 @@ function baseState(overrides = {}) {
     hasUnresolvedTestFailure: false,
     cycles: [],
     ...stateOverrides,
-  };
+  });
 }
 
 test('formatReviewReport preserves cycle ordering, implementation sections, tests, and worktree footer', () => {
