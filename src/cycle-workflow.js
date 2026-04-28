@@ -4,7 +4,7 @@ import {
   projectCycleCommandOptions,
   resolveCycleCommandOptions,
 } from './command-options.js';
-import { COMMAND_OPTIONS } from './command-option-schema.js';
+import { COMMAND_OPTIONS, PROVIDER_RESUME_FIELDS } from './command-option-schema.js';
 import { resolveRuntimeOptions } from './config.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -36,28 +36,54 @@ import {
   WORKSPACE_MODES,
 } from './workflow-constants.js';
 
-const RESUME_ALWAYS_NEXT_FIELDS = new Set(['json', 'resume']);
-const RESUME_PROVIDER_FIELDS = Object.freeze(['providers', 'providerIds', 'primaryProvider']);
+// Single resume-precedence table. For each resume-relevant field, records when
+// `next` (this invocation) should win over `stored` (the resumed run):
+//   - 'always-next': unconditionally — fields tied to this invocation only
+//                    (e.g. `json`, `resume`).
+//   - 'flag-present': when any of the option's CLI flags is explicit.
+//   - 'provider': flag-present, OR stored.providers is missing/empty.
+// Built once from the schema's `resumeOverrideFields` so resume precedence
+// lives entirely in `command-option-schema.js`.
+const PROVIDER_FALLBACK_FIELDS = new Set(PROVIDER_RESUME_FIELDS);
 
-export const CYCLE_RESUME_OPTION_OVERRIDES = Object.freeze(
-  COMMAND_OPTIONS.flatMap((option) => {
-    const fields = Object.freeze(
-      (option.resumeOverrideFields ?? []).filter((field) => !RESUME_ALWAYS_NEXT_FIELDS.has(field)),
-    );
-    if (!fields.length) return [];
-    return [Object.freeze({
-      option: option.name,
-      flags: Object.freeze([option.name, ...option.aliases]),
-      fields,
-    })];
-  }),
-);
+export const RESUME_FIELD_RULES = Object.freeze(buildResumeFieldRules());
+
+/**
+ * @returns {Record<string, ResumeFieldRule>}
+ */
+function buildResumeFieldRules() {
+  const flagsByField = new Map();
+  const alwaysNext = new Set();
+  for (const option of COMMAND_OPTIONS) {
+    if (!option.resumeOverrideFields.length) continue;
+    if (option.resumeAlwaysOverrides) {
+      for (const field of option.resumeOverrideFields) alwaysNext.add(field);
+      continue;
+    }
+    const optionFlags = [option.name, ...option.aliases];
+    for (const field of option.resumeOverrideFields) {
+      flagsByField.set(field, [...(flagsByField.get(field) || []), ...optionFlags]);
+    }
+  }
+  /** @type {Record<string, ResumeFieldRule>} */
+  const rules = {};
+  for (const field of alwaysNext) rules[field] = Object.freeze({ kind: 'always-next' });
+  for (const [field, fieldFlags] of flagsByField) {
+    if (rules[field]) continue;
+    rules[field] = Object.freeze({
+      kind: PROVIDER_FALLBACK_FIELDS.has(field) ? 'provider' : 'flag-present',
+      flags: Object.freeze([...new Set(fieldFlags)]),
+    });
+  }
+  return rules;
+}
 
 /**
  * @typedef {import('./cycle-state.js').CycleRuntimeOptions} CycleRuntimeOptions
  * @typedef {import('./cycle-state.js').CycleState} CycleState
  * @typedef {import('./cycle-state.js').CycleLogger} CycleLogger
  * @typedef {import('./assessment-cycle.js').AssessmentCycleAdapter} AssessmentCycleAdapter
+ * @typedef {{ kind: 'always-next' } | { kind: 'flag-present' | 'provider', flags: ReadonlyArray<string> }} ResumeFieldRule
  */
 
 /**
@@ -322,30 +348,29 @@ async function resolveWorktreeWorkspaceCwd(cwd, isolated) {
   );
 }
 
-// Resume option precedence, applied in order:
-// 1. Start from stored options; fall back to next for fields only present on next.
-// 2. CYCLE_RESUME_OPTION_OVERRIDES: when matching CLI flags are present, force next for those fields.
-// 3. RESUME_ALWAYS_NEXT_FIELDS: always taken from next.
-// 4. If stored.providers is missing or empty, RESUME_PROVIDER_FIELDS fall through to next.
+// Resume merge: start from stored-if-present-else-next, then for each rule in
+// RESUME_FIELD_RULES whose predicate fires, force the field to next.
 export function mergeResumeOptions(storedOptions, nextOptions, flags) {
   const stored = storedOptions && typeof storedOptions === 'object' ? storedOptions : {};
-  const decisions = new Map();
+  const useStored = new Map();
   for (const field of new Set([...Object.keys(stored), ...Object.keys(nextOptions)])) {
-    decisions.set(field, Object.hasOwn(stored, field) ? 'stored' : 'next');
+    useStored.set(field, Object.hasOwn(stored, field));
   }
-  for (const override of CYCLE_RESUME_OPTION_OVERRIDES) {
-    if (!hasAnyFlag(flags, override.flags)) continue;
-    for (const field of override.fields) decisions.set(field, 'next');
-  }
-  for (const field of RESUME_ALWAYS_NEXT_FIELDS) decisions.set(field, 'next');
-  if (!Array.isArray(stored.providers) || stored.providers.length === 0) {
-    for (const field of RESUME_PROVIDER_FIELDS) decisions.set(field, 'next');
+  for (const [field, rule] of Object.entries(RESUME_FIELD_RULES)) {
+    if (resumeRuleSelectsNext(rule, flags, stored)) useStored.set(field, false);
   }
   const merged = {};
-  for (const [field, source] of decisions) {
-    merged[field] = source === 'next' ? nextOptions[field] : stored[field];
+  for (const [field, fromStored] of useStored) {
+    merged[field] = fromStored ? stored[field] : nextOptions[field];
   }
   return merged;
+}
+
+function resumeRuleSelectsNext(rule, flags, stored) {
+  if (rule.kind === 'always-next') return true;
+  if (hasAnyFlag(flags, rule.flags)) return true;
+  return rule.kind === 'provider'
+    && (!Array.isArray(stored.providers) || stored.providers.length === 0);
 }
 
 function logCycleWorkflowStart(state) {

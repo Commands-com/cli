@@ -162,45 +162,41 @@ async function runImplementationBatch({
 
 /**
  * @param {{
- *   provider: any,
- *   providers?: Array<any>,
- *   store: any,
- *   cycle: any,
- *   objective: any,
- *   findings: any,
- *   context: any,
- *   workspace?: any,
- *   testCommand?: string,
- *   model?: string,
- *   timeoutMs: any,
- *   maxImplementers?: number,
- *   parallel?: boolean,
- *   retries?: number,
- *   retryDelayMs?: any,
- *   logger?: { info(message?: string): void },
- *   logPrefix?: string,
- *   json?: boolean,
+ *   execution: {
+ *     provider: any,
+ *     providers?: Array<any>,
+ *     model?: string,
+ *     timeoutMs: any,
+ *     retries?: number,
+ *     retryDelayMs?: any,
+ *     logger?: { info(message?: string): void },
+ *     logPrefix?: string,
+ *   },
+ *   taskWorkspace: { store: any, cycle: any, context: any, workspace?: any },
+ *   assignment: { objective: any, findings: any, testCommand?: string },
+ *   orchestration?: { maxImplementers?: number, parallel?: boolean },
  * }} args
  */
 export async function runOrchestratedImplementationPhase({
-  provider,
-  providers = [],
-  store,
-  cycle,
-  objective,
-  findings,
-  context,
-  workspace,
-  testCommand = '',
-  model = '',
-  timeoutMs,
-  maxImplementers = 6,
-  parallel = true,
-  retries = 1,
-  retryDelayMs = undefined,
-  logger = SILENT_LOGGER,
-  logPrefix = 'review',
+  execution,
+  taskWorkspace,
+  assignment,
+  orchestration = {},
 }) {
+  const {
+    provider,
+    providers = [],
+    model = '',
+    timeoutMs,
+    retries = 1,
+    retryDelayMs,
+    logger = SILENT_LOGGER,
+    logPrefix = 'review',
+  } = execution;
+  const { store, cycle, context, workspace } = taskWorkspace;
+  const { objective, findings, testCommand = '' } = assignment;
+  const { maxImplementers = 6, parallel = true } = orchestration;
+
   const output = logger;
   const maxTasks = Math.max(1, maxImplementers);
   const planPrompt = buildImplementationPlanPrompt({ objective, findings, context, testCommand, maxTasks });

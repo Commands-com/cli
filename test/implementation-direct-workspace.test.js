@@ -280,27 +280,32 @@ test('runOrchestratedImplementationPhase serializes non-git direct-workspace tas
     await writeConcurrencyProvider(providerBin, providerState);
 
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: providerBin },
-      store: fileStore(storeRoot),
-      cycle: 1,
-      objective: 'guard direct workspace implementation',
-      findings: 'two disjoint direct-workspace tasks',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(not a git repository)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: providerBin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info(message) { loggerMessages.push(message); } },
+        logPrefix: 'direct-guard',
       },
-      workspace: { mode: 'current', cwd: tmp },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info(message) { loggerMessages.push(message); } },
-      logPrefix: 'direct-guard',
+      taskWorkspace: {
+        store: fileStore(storeRoot),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(not a git repository)',
+          diffStat: '(none)',
+          diff: '',
+        },
+        workspace: { mode: 'current', cwd: tmp },
+      },
+      assignment: {
+        objective: 'guard direct workspace implementation',
+        findings: 'two disjoint direct-workspace tasks',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
@@ -329,27 +334,32 @@ test('runOrchestratedImplementationPhase flushes completed batches before report
     await writeSecondBatchFailureProvider(providerBin, providerState);
 
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: providerBin },
-      store: fileStore(storeRoot),
-      cycle: 1,
-      objective: 'preserve completed implementation batches',
-      findings: 'batch one should be preserved when batch two fails',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(not a git repository)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: providerBin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'partial-direct',
       },
-      workspace: { mode: 'current', cwd: tmp },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'partial-direct',
+      taskWorkspace: {
+        store: fileStore(storeRoot),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(not a git repository)',
+          diffStat: '(none)',
+          diff: '',
+        },
+        workspace: { mode: 'current', cwd: tmp },
+      },
+      assignment: {
+        objective: 'preserve completed implementation batches',
+        findings: 'batch one should be preserved when batch two fails',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);
@@ -458,27 +468,32 @@ test('runOrchestratedImplementationPhase stops direct-workspace tasks after the 
     await writeFailingAfterEditProvider(providerBin, providerState);
 
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: providerBin },
-      store: fileStore(storeRoot),
-      cycle: 1,
-      objective: 'guard direct workspace implementation failures',
-      findings: 'first task fails after editing; second task must not run',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(not a git repository)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: providerBin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'direct-guard',
       },
-      workspace: { mode: 'current', cwd: tmp },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'direct-guard',
+      taskWorkspace: {
+        store: fileStore(storeRoot),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(not a git repository)',
+          diffStat: '(none)',
+          diff: '',
+        },
+        workspace: { mode: 'current', cwd: tmp },
+      },
+      assignment: {
+        objective: 'guard direct workspace implementation failures',
+        findings: 'first task fails after editing; second task must not run',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);

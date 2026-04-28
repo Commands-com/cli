@@ -69,30 +69,24 @@ export async function runImplementationAndValidationPhase(state, {
     timeoutMs,
     providerRetries,
     serial,
-    testCommand: rawTestCommand,
-    maxImplementers: rawMaxImplementers,
+    testCommand,
+    maxImplementers,
   } = options;
-  const testCommand = rawTestCommand === undefined ? '' : rawTestCommand;
-  const maxImplementers = rawMaxImplementers === undefined ? 1 : rawMaxImplementers;
   const implementationParallel = !serial && maxImplementers > 1;
   phaseLogger.info(`cycle ${cycle}: orchestrator (${primaryProvider.id})`);
   const implementationPhase = await runOrchestratedImplementationPhase({
-    provider: primaryProvider,
-    providers,
-    store,
-    cycle,
-    objective,
-    findings,
-    context,
-    workspace,
-    testCommand,
-    model,
-    timeoutMs,
-    maxImplementers,
-    parallel: implementationParallel,
-    retries: providerRetries,
-    logger: phaseLogger,
-    logPrefix: kind,
+    execution: {
+      provider: primaryProvider,
+      providers,
+      model,
+      timeoutMs,
+      retries: providerRetries,
+      logger: phaseLogger,
+      logPrefix: kind,
+    },
+    taskWorkspace: { store, cycle, context, workspace },
+    assignment: { objective, findings, testCommand },
+    orchestration: { maxImplementers, parallel: implementationParallel },
   });
 
   const validationOutcome = await buildImplementationValidationOutcome({

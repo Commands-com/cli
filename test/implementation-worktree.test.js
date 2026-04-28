@@ -87,18 +87,23 @@ test('runOrchestratedImplementationPhase applies successful task worktree patche
   try {
     const context = await collectRepoContext(tmp);
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store,
-      cycle: 1,
-      objective: 'apply worktree task patch',
-      findings: 'create the task output file',
-      context,
-      workspace: { mode: 'current', cwd: tmp },
-      timeoutMs: 5_000,
-      maxImplementers: 1,
-      retries: 0,
-      retryDelayMs: 0,
-      json: true,
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+      },
+      taskWorkspace: {
+        store,
+        cycle: 1,
+        context,
+        workspace: { mode: 'current', cwd: tmp },
+      },
+      assignment: {
+        objective: 'apply worktree task patch',
+        findings: 'create the task output file',
+      },
+      orchestration: { maxImplementers: 1 },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
@@ -172,20 +177,25 @@ test('runOrchestratedImplementationPhase returns batch-one success before batch-
   try {
     const context = await collectRepoContext(tmp);
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store: fileStore(storeRoot, 'unit-partial-run'),
-      cycle: 1,
-      objective: 'partial merge behavior',
-      findings: 'one task should fail after another succeeds',
-      context,
-      workspace: { mode: 'current', cwd: tmp },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'partial',
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'partial',
+      },
+      taskWorkspace: {
+        store: fileStore(storeRoot, 'unit-partial-run'),
+        cycle: 1,
+        context,
+        workspace: { mode: 'current', cwd: tmp },
+      },
+      assignment: {
+        objective: 'partial merge behavior',
+        findings: 'one task should fail after another succeeds',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);

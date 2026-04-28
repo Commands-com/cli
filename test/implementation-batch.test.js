@@ -111,26 +111,31 @@ test('runOrchestratedImplementationPhase serial mode does not schedule jobs afte
 
   try {
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store: fileStore(storeRoot, 'unit-implementation-batch-serial'),
-      cycle: 1,
-      objective: 'test implementation batch scheduling',
-      findings: 'focused batch findings',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'serial',
       },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: false,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'serial',
+      taskWorkspace: {
+        store: fileStore(storeRoot, 'unit-implementation-batch-serial'),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'test implementation batch scheduling',
+        findings: 'focused batch findings',
+      },
+      orchestration: { maxImplementers: 2, parallel: false },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);
@@ -189,26 +194,31 @@ test('runOrchestratedImplementationPhase parallel mode settles all scheduled job
 
   try {
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store: fileStore(storeRoot, 'unit-implementation-batch-parallel'),
-      cycle: 1,
-      objective: 'test implementation batch scheduling',
-      findings: 'focused batch findings',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'parallel',
       },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'parallel',
+      taskWorkspace: {
+        store: fileStore(storeRoot, 'unit-implementation-batch-parallel'),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'test implementation batch scheduling',
+        findings: 'focused batch findings',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);

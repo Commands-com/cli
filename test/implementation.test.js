@@ -22,26 +22,31 @@ test('runOrchestratedImplementationPhase returns direct-workspace results in bat
 
   try {
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'mock' },
-      store: fileStore(storeRoot),
-      cycle: 2,
-      objective: 'test implementation batch behavior',
-      findings: 'focused batch findings',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'mock' },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'implementation-batch',
       },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: true,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'implementation-batch',
+      taskWorkspace: {
+        store: fileStore(storeRoot),
+        cycle: 2,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'test implementation batch behavior',
+        findings: 'focused batch findings',
+      },
+      orchestration: { maxImplementers: 2, parallel: true },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
@@ -68,27 +73,32 @@ test('runOrchestratedImplementationPhase falls back from transient planner capac
     ]);
 
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'claude', command: claude },
-      providers: [{ id: 'claude', command: claude }, { id: 'mock' }],
-      store: fileStore(storeRoot),
-      cycle: 1,
-      objective: 'test implementation fallback',
-      findings: 'focused findings',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'claude', command: claude },
+        providers: [{ id: 'claude', command: claude }, { id: 'mock' }],
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info(message) { messages.push(message); } },
+        logPrefix: 'implementation-fallback',
       },
-      timeoutMs: 5_000,
-      maxImplementers: 1,
-      parallel: false,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info(message) { messages.push(message); } },
-      logPrefix: 'implementation-fallback',
+      taskWorkspace: {
+        store: fileStore(storeRoot),
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'test implementation fallback',
+        findings: 'focused findings',
+      },
+      orchestration: { maxImplementers: 1, parallel: false },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
@@ -151,26 +161,31 @@ test('runOrchestratedImplementationPhase serial mode stops after the first faile
 
   try {
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store: fileStore(storeRoot, 'unit-implementation-batch-serial-run'),
-      cycle: 3,
-      objective: 'test implementation batch behavior',
-      findings: 'focused batch findings',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 0,
+        retryDelayMs: 0,
+        logger: { info() {} },
+        logPrefix: 'serial',
       },
-      timeoutMs: 5_000,
-      maxImplementers: 2,
-      parallel: false,
-      retries: 0,
-      retryDelayMs: 0,
-      logger: { info() {} },
-      logPrefix: 'serial',
+      taskWorkspace: {
+        store: fileStore(storeRoot, 'unit-implementation-batch-serial-run'),
+        cycle: 3,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'test implementation batch behavior',
+        findings: 'focused batch findings',
+      },
+      orchestration: { maxImplementers: 2, parallel: false },
     });
 
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.PARTIAL);
@@ -245,24 +260,29 @@ test('runOrchestratedImplementationPhase retries transient implementer failures 
   };
   try {
     const phase = await runOrchestratedImplementationPhase({
-      provider: { id: 'codex', command: bin },
-      store,
-      cycle: 1,
-      objective: 'retry implementation',
-      findings: 'fix retry behavior',
-      context: {
-        repoRoot: tmp,
-        branch: 'main',
-        head: 'abc123',
-        status: '(clean)',
-        diffStat: '(none)',
-        diff: '',
+      execution: {
+        provider: { id: 'codex', command: bin },
+        timeoutMs: 5_000,
+        retries: 1,
+        retryDelayMs: 0,
       },
-      timeoutMs: 5_000,
-      maxImplementers: 1,
-      retries: 1,
-      retryDelayMs: 0,
-      json: true,
+      taskWorkspace: {
+        store,
+        cycle: 1,
+        context: {
+          repoRoot: tmp,
+          branch: 'main',
+          head: 'abc123',
+          status: '(clean)',
+          diffStat: '(none)',
+          diff: '',
+        },
+      },
+      assignment: {
+        objective: 'retry implementation',
+        findings: 'fix retry behavior',
+      },
+      orchestration: { maxImplementers: 1 },
     });
     assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
     const result = phase.result;

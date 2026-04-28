@@ -9,7 +9,7 @@ import { DEFAULT_TIMEOUT_MS } from './provider-limits.js';
 /** @typedef {'sharedWorkflow'|'cycleCommand'|'fanoutMode'|'roomCommand'} OptionResolverGroup */
 /** @typedef {'stringOption'|'booleanOption'|'positiveIntegerOption'|'nonNegativeIntegerOption'|'listOption'} OptionReader */
 /** @typedef {{resolver: OptionResolverKind, field: string, fallback: any, group: OptionResolverGroup}} OptionResolver */
-/** @typedef {{name: string, value?: string, description: string, scopes: ReadonlyArray<string>, aliases: ReadonlyArray<string>, readWith: OptionReader, resumeOverrideFields: ReadonlyArray<string>, resolve: ReadonlyArray<OptionResolver>, max?: number}} CommandOption */
+/** @typedef {{name: string, value?: string, description: string, scopes: ReadonlyArray<string>, aliases: ReadonlyArray<string>, readWith: OptionReader, resumeOverrideFields: ReadonlyArray<string>, resumeAlwaysOverrides: boolean, resolve: ReadonlyArray<OptionResolver>, max?: number}} CommandOption */
 
 export const OPTION_READER_NAMES = Object.freeze([
   'stringOption',
@@ -43,6 +43,7 @@ function defineOption(option) {
     aliases: Object.freeze(option.aliases || []),
     scopes: Object.freeze(option.scopes || []),
     resumeOverrideFields: Object.freeze(Array.isArray(option.resumeOverrideFields) ? option.resumeOverrideFields : []),
+    resumeAlwaysOverrides: Boolean(option.resumeAlwaysOverrides),
     resolve: Object.freeze(resolveSource),
   });
 }
@@ -72,7 +73,7 @@ const RUNS = COMMAND_NAME.RUNS;
 
 const CYCLE_COMMANDS = Object.freeze([REVIEW, QUALITY]);
 const PROVIDER_FANOUT_COMMANDS = Object.freeze([REVIEW, QUALITY, DOCTOR, INIT]);
-const PROVIDER_RESUME_FIELDS = Object.freeze(['providers', 'providerIds', 'primaryProvider']);
+export const PROVIDER_RESUME_FIELDS = Object.freeze(['providers', 'providerIds', 'primaryProvider']);
 
 export const HELP_COMMANDS = Object.freeze(
   COMMAND_REGISTRY
@@ -161,6 +162,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     value: '<run-id|path|latest>',
     description: 'Resume a previous review/quality run',
     scopes: CYCLE_COMMANDS,
+    resumeOverrideFields: Object.freeze(['resume']),
+    resumeAlwaysOverrides: true,
     resolve: cycleField('resume', '', CYCLE_COMMAND),
   },
   {
@@ -315,6 +318,8 @@ export const COMMAND_OPTIONS = Object.freeze([
     name: 'json',
     description: 'Write machine-readable output on stdout',
     scopes: [COMMON],
+    resumeOverrideFields: Object.freeze(['json']),
+    resumeAlwaysOverrides: true,
     resolve: cycleField('json', false, CYCLE_COMMAND),
   },
   {

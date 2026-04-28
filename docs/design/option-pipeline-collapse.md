@@ -25,11 +25,10 @@ so no `RUN_STATE_VERSION` bump was required.
   `resolveRoomCommandOptions`, `projectCycleCommandOptions`,
   `filterKnownStoredCycleOptions`, plus the pre-existing flag helpers.
 - **Resume-merge step — `src/cycle-workflow.js`.** `mergeResumeOptions`
-  applies the schema-declared `resumeOverrideFields` (via
-  `CYCLE_RESUME_OPTION_OVERRIDES`, derived from the schema at module
-  load) and the always-next set (`json`, `resume`). It runs as a thin
-  policy step on top of the reader's output, after the env/config
-  layering and the provider short-circuit
+  applies `RESUME_FIELD_RULES`, a single precedence table derived from
+  the schema's `resumeOverrideFields` and `resumeAlwaysOverrides`
+  declarations. It runs as a thin policy step on top of the reader's
+  output, after the env/config layering and the provider short-circuit
   (`shouldUseResumeProviders` / `resumeProviderOptions`). The deleted
   `src/command-option-resolver.js` is gone; its contents moved into the
   reader.
@@ -57,10 +56,10 @@ caller passed the option's flag explicitly.
   `test/cycle-workflow.test.js` covering the cross-product of
   `COMMANDS_COM_MODEL` / `--model` / stored-resume model, and the
   no-flag-no-resume `COMMANDS_COM_PROVIDER` path.
-- **Schema-derived resume override flags.** `CYCLE_RESUME_OPTION_OVERRIDES`
-  is built from each option's `resumeOverrideFields` and verified to
-  exclude the always-next fields (`json`, `resume`) by
-  `test/cycle-workflow.test.js`.
+- **Schema-derived resume precedence.** `RESUME_FIELD_RULES` is built
+  from each option's `resumeOverrideFields` and
+  `resumeAlwaysOverrides`; `test/cycle-workflow.test.js` verifies
+  flag-driven fields and the always-next fields (`json`, `resume`).
 - **`--max-cycles` fallback ordering.** The `--max-cycles` fallback
   reads already-resolved sibling fields (`fix`, `untilScore`) via the
   `resolveOptionFallback` context, so the reader must preserve schema

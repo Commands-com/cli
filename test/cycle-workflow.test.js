@@ -5,10 +5,14 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
 import {
-  CYCLE_RESUME_OPTION_OVERRIDES,
+  RESUME_FIELD_RULES,
   mergeResumeOptions,
   runCycleWorkflow,
 } from '../src/cycle-workflow.js';
+
+const RESUME_OVERRIDE_OPTIONS = COMMAND_OPTIONS.filter(
+  (option) => option.resumeOverrideFields.length && !option.resumeAlwaysOverrides,
+);
 
 const FIELD_VALUES = Object.freeze({
   providers: {
@@ -42,7 +46,7 @@ const FIELD_VALUES = Object.freeze({
 });
 
 function resumeFields() {
-  return [...new Set(CYCLE_RESUME_OPTION_OVERRIDES.flatMap((override) => override.fields))];
+  return [...new Set(RESUME_OVERRIDE_OPTIONS.flatMap((option) => option.resumeOverrideFields))];
 }
 
 function optionsFor(kind) {
@@ -67,15 +71,23 @@ function assertMergedFields(merged, overriddenFields, message) {
   assert.equal(merged.resume, 'next-resume', `${message}: resume follows this invocation`);
 }
 
-test('cycle resume override flags are derived from command option schema entries', () => {
-  assert.ok(CYCLE_RESUME_OPTION_OVERRIDES.length > 0);
-  for (const override of CYCLE_RESUME_OPTION_OVERRIDES) {
-    const option = COMMAND_OPTIONS.find((item) => item.name === override.option);
-    assert.ok(option, `--${override.option} should be declared in the schema`);
-    assert.deepEqual(override.flags, [option.name, ...option.aliases]);
-    assert.equal(override.fields.includes('resume'), false);
-    assert.equal(override.fields.includes('json'), false);
+test('cycle resume rules are derived from command option schema entries', () => {
+  assert.ok(RESUME_OVERRIDE_OPTIONS.length > 0);
+  for (const option of RESUME_OVERRIDE_OPTIONS) {
+    for (const field of option.resumeOverrideFields) {
+      const rule = RESUME_FIELD_RULES[field];
+      assert.ok(rule, `${field} should have a rule`);
+      if (rule.kind === 'always-next') {
+        assert.fail(`${field} should be flag-driven, not always-next`);
+      }
+      assert.ok(
+        [option.name, ...option.aliases].some((flag) => rule.flags.includes(flag)),
+        `RESUME_FIELD_RULES.${field}.flags should include flags from --${option.name}`,
+      );
+    }
   }
+  assert.equal(RESUME_FIELD_RULES.json.kind, 'always-next');
+  assert.equal(RESUME_FIELD_RULES.resume.kind, 'always-next');
 });
 
 test('mergeResumeOptions keeps stored resume-eligible values without explicit flags', () => {
@@ -88,10 +100,10 @@ test('mergeResumeOptions applies each resume override only when its flag is expl
   const stored = optionsFor('stored');
   const next = optionsFor('next');
 
-  for (const override of CYCLE_RESUME_OPTION_OVERRIDES) {
-    const merged = mergeResumeOptions(stored, next, new Map([[override.option, 'true']]));
+  for (const option of RESUME_OVERRIDE_OPTIONS) {
+    const merged = mergeResumeOptions(stored, next, new Map([[option.name, 'true']]));
 
-    assertMergedFields(merged, override.fields, `--${override.option}`);
+    assertMergedFields(merged, option.resumeOverrideFields, `--${option.name}`);
   }
 });
 
