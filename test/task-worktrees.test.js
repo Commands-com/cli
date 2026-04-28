@@ -163,6 +163,62 @@ test('createTaskWorktree rejects an empty successful base ref resolution', { ski
   }
 });
 
+test('createTaskWorktree surfaces a stale-directory failure with the path and removal guidance', { skip: process.platform === 'win32' }, async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-task-worktree-stale-'));
+  const bin = path.join(tmp, 'bin');
+  const integrationCwd = path.join(tmp, 'repo');
+  const fakeGit = path.join(bin, 'git');
+  const originalPath = process.env.PATH;
+
+  try {
+    await fs.mkdir(bin, { recursive: true });
+    await fs.mkdir(integrationCwd, { recursive: true });
+    // Fake git: rev-parse succeeds with a real-looking SHA; `worktree add --detach <path> <sha>`
+    // simulates the canonical stale-dir failure by emitting `is not an empty directory`
+    // against the path arg ($4), so the assertion can match the actual constructed path.
+    await fs.writeFile(fakeGit, [
+      '#!/bin/sh',
+      'if [ "$1" = "rev-parse" ]; then',
+      '  echo deadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "worktree" ] && [ "$2" = "add" ]; then',
+      '  printf "fatal: %s is not an empty directory\\n" "$4" >&2',
+      '  exit 128',
+      'fi',
+      'echo "unexpected git command: $*" >&2',
+      'exit 2',
+      '',
+    ].join('\n'), { mode: 0o755 });
+
+    process.env.PATH = `${bin}${path.delimiter}${originalPath || ''}`;
+
+    await assert.rejects(
+      () => createTaskWorktree({
+        integrationCwd,
+        context: { isGit: true, gitRoot: integrationCwd, repoRoot: integrationCwd },
+        taskRoot: tmp,
+        runId: 'stale-run',
+        cycle: 1,
+        taskId: 'stale-task',
+      }),
+      (err) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /git worktree add failed: stale directory at .+stale-run\/cycle-1\/stale-task-attempt-1-[a-f0-9]{6} from a prior run/);
+        assert.match(err.message, /rm -rf/);
+        return true;
+      },
+    );
+  } finally {
+    if (originalPath === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = originalPath;
+    }
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test('createTaskWorktree serializes concurrent add operations against the same repo', { skip: process.platform === 'win32' }, async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), 'commands-com-task-worktree-race-'));
   const repoRoot = path.join(tmp, 'repo');

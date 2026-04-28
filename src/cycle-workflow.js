@@ -118,6 +118,7 @@ function resumeProviderOptions(options) {
     ? source.providers.filter(isProviderRecord)
     : [];
   if (!providers.length) return null;
+  // Older run-state may carry a primaryProvider without a `command`; resume falls back to PATH lookup at run time.
   const primaryProvider = isProviderRecord(source.primaryProvider)
     ? source.primaryProvider
     : providers[0];
@@ -239,6 +240,7 @@ export async function runCycleWorkflow(parsed, {
         kind,
         provider: options.primaryProvider.id,
         providers: options.providerIds,
+        // Both keys intentionally share primaryProvider.id; see assessment-completion.js.
         synthesizerProvider: options.primaryProvider.id,
         implementerProvider: options.primaryProvider.id,
         model: options.model,

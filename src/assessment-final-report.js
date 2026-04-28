@@ -80,6 +80,7 @@ function buildAssessmentFinalSummary(state, {
     status: finalState.status,
     cycles: cycles.length,
     providers: state.options?.providerIds || [],
+    // Both keys intentionally share primaryProvider.id; see assessment-completion.js.
     synthesizerProvider: state.options?.primaryProvider?.id || '',
     implementerProvider: state.options?.primaryProvider?.id || '',
     workspace: state.workspace || {},

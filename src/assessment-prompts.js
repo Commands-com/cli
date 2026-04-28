@@ -94,12 +94,7 @@ const QUALITY_PROMPT_CONFIG = Object.freeze({
   ]),
 });
 
-const REVIEW_SYNTHESIS_PROMPT_CONFIG = Object.freeze({
-  summaryNoun: 'synthesis',
-  summaryContract: ASSESSMENT_SUMMARY_CONTRACT,
-});
-
-const QUALITY_SYNTHESIS_PROMPT_CONFIG = Object.freeze({
+const SYNTHESIS_PROMPT_CONFIG = Object.freeze({
   summaryNoun: 'synthesis',
   summaryContract: ASSESSMENT_SUMMARY_CONTRACT,
 });
@@ -294,7 +289,7 @@ export function buildReviewPrompt({ objective, role, context, cycle, priorFindin
 export function buildReviewSynthesisPrompt({ objective, context, cycle, reviewerOutputs }) {
   return buildSynthesisPrompt({
     intent: { kind: 'review-synthesis', cycle },
-    config: REVIEW_SYNTHESIS_PROMPT_CONFIG,
+    config: SYNTHESIS_PROMPT_CONFIG,
     opening: 'Synthesize review findings for a Commands.com review cycle.',
     instructions: [
       'Deduplicate repeated issues, resolve conflicts between reviewers, prioritize only actionable findings, and choose the final A-F score.',
@@ -349,7 +344,7 @@ export function buildQualityAuditPrompt({ areas, context, changed, cycle = 1, pr
 export function buildQualitySynthesisPrompt({ areas, context, cycle, outputs }) {
   return buildSynthesisPrompt({
     intent: { kind: 'quality-synthesis', cycle },
-    config: QUALITY_SYNTHESIS_PROMPT_CONFIG,
+    config: SYNTHESIS_PROMPT_CONFIG,
     opening: 'Synthesize code quality findings for a Commands.com quality audit.',
     instructions: [
       'Compare provider scores, deduplicate repeated findings, and choose the final A-F score.',

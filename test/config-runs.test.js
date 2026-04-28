@@ -57,6 +57,42 @@ test('loadConfig rejects non-string/array providers as a UsageError', async () =
   await fs.rm(cwd, { recursive: true, force: true });
 });
 
+test('loadConfig rejects non-string provider as a UsageError', async () => {
+  const cwd = await tempDir('commands-com-test-');
+  const configDir = path.join(cwd, '.commands-com');
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(
+    path.join(configDir, 'config.json'),
+    JSON.stringify({ provider: ['claude', 'codex'] }),
+    'utf8',
+  );
+  await assert.rejects(loadConfig(cwd), (error) => {
+    assert.ok(error instanceof UsageError);
+    assert.equal(error.exitCode, 2);
+    assert.match(error.message, /provider must be a string/);
+    return true;
+  });
+  await fs.rm(cwd, { recursive: true, force: true });
+});
+
+test('loadConfig rejects non-string model as a UsageError', async () => {
+  const cwd = await tempDir('commands-com-test-');
+  const configDir = path.join(cwd, '.commands-com');
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.writeFile(
+    path.join(configDir, 'config.json'),
+    JSON.stringify({ model: { name: 'gpt' } }),
+    'utf8',
+  );
+  await assert.rejects(loadConfig(cwd), (error) => {
+    assert.ok(error instanceof UsageError);
+    assert.equal(error.exitCode, 2);
+    assert.match(error.message, /model must be a string/);
+    return true;
+  });
+  await fs.rm(cwd, { recursive: true, force: true });
+});
+
 test('initConfig writes and merges local config', async () => {
   const cwd = await tempDir('commands-com-test-');
   const first = await initConfig(cwd, { provider: 'mock' });

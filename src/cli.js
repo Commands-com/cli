@@ -24,7 +24,11 @@ function resolveCwd(flags, base = process.cwd()) {
   if (!stats.isDirectory()) {
     throw new UsageError(`--cwd must be a directory: ${resolved}`);
   }
-  return resolved;
+  try {
+    return fs.realpathSync(resolved);
+  } catch {
+    return resolved;
+  }
 }
 
 const HELP = `Usage: commands-com <command> [options]

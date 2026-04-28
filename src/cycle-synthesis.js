@@ -201,56 +201,52 @@ export async function runSynthesisWithFallback(dependencies, {
     providerRetries,
   } = options;
   const providerChain = providerFallbackChain(primaryProvider, providers);
-  const lastInChain = providerChain[providerChain.length - 1];
   const prefix = `cycle ${cycle}: `;
-  let attempted = providerChain[0];
 
-  try {
-    return await runWithProviderFallback({
-      providerChain,
-      runForProvider: async (provider, { isLast }) => {
-        attempted = provider;
-        const result = await tryProviderSynthesis({
-          providerCall: {
-            provider,
-            model,
-            timeoutMs,
-            providerRetries,
-            cwd: context.repoRoot,
-          },
-          artifacts: createCycleSynthesisArtifacts({
-            store,
-            cycle,
-            provider,
-            sharedError: isLast,
-          }),
-          prompt,
-          logger,
-          prefix,
-        });
-        return {
-          synthesisProvider: provider.id,
-          synthesisText: result.text,
-          synthesisError: '',
-        };
-      },
-      onFallback: async ({ from, to }) => {
-        logger?.info(`${prefix}synthesis failed (${from.id})`);
-        logger?.info(`${prefix}synthesis fallback ${from.id} -> ${to.id}`);
-      },
-    });
-  } catch (error) {
-    const synthesisError = formatFailureMessage(error);
-    logger?.info(`${prefix}synthesis failed (${attempted.id}); using ${fallbackDescription}`);
-    if (attempted !== lastInChain) {
-      await store.write(sharedCycleSynthesisErrorPath(cycle), synthesisError);
-    }
-    return {
-      synthesisProvider: attempted.id,
-      synthesisText: '',
-      synthesisError,
-    };
-  }
+  return runWithProviderFallback({
+    providerChain,
+    runForProvider: async (provider, { isLast }) => {
+      const result = await tryProviderSynthesis({
+        providerCall: {
+          provider,
+          model,
+          timeoutMs,
+          providerRetries,
+          cwd: context.repoRoot,
+        },
+        artifacts: createCycleSynthesisArtifacts({
+          store,
+          cycle,
+          provider,
+          sharedError: isLast,
+        }),
+        prompt,
+        logger,
+        prefix,
+      });
+      return {
+        synthesisProvider: provider.id,
+        synthesisText: result.text,
+        synthesisError: '',
+      };
+    },
+    onFallback: ({ from, to }) => {
+      logger?.info(`${prefix}synthesis failed (${from.id})`);
+      logger?.info(`${prefix}synthesis fallback ${from.id} -> ${to.id}`);
+    },
+    onExhausted: async ({ provider, error, isLast }) => {
+      const synthesisError = formatFailureMessage(error);
+      logger?.info(`${prefix}synthesis failed (${provider.id}); using ${fallbackDescription}`);
+      if (!isLast) {
+        await store.write(sharedCycleSynthesisErrorPath(cycle), synthesisError);
+      }
+      return {
+        synthesisProvider: provider.id,
+        synthesisText: '',
+        synthesisError,
+      };
+    },
+  });
 }
 
 export function formatPriorFindings({

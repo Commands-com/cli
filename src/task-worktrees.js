@@ -137,7 +137,11 @@ export async function createTaskWorktree({
     timeoutMs: 60_000,
   }));
   if (!result.ok) {
-    throw new Error(`git worktree add failed: ${(result.stderr || result.stdout).trim()}`);
+    const errorOutput = (result.stderr || result.stdout).trim();
+    if (/is not an empty directory/i.test(errorOutput)) {
+      throw new Error(`git worktree add failed: stale directory at ${worktreePath} from a prior run; remove it (e.g. \`rm -rf "${worktreePath}"\`) and retry`);
+    }
+    throw new Error(`git worktree add failed: ${errorOutput}`);
   }
 
   return {

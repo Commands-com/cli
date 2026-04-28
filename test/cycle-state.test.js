@@ -242,6 +242,24 @@ test('createCycleRecorder applyImplementationResult applies nested mutations in 
   assert.equal(state.priorFindings, 'follow-up findings');
 });
 
+test('createCycleRecorder applyImplementationResult does not override score when the plan is missing', () => {
+  const state = createCycleState(baseStateArgs({}));
+  const recorder = createCycleRecorder(state);
+  const cycleRecord = recorder.beginCycle(1, {
+    score: 'C',
+    issueCount: 4,
+    synopsis: 'synthesizer findings',
+  });
+
+  recorder.applyImplementationResult(cycleRecord, {
+    implementation: { tasks: [] },
+  });
+
+  assert.equal(cycleRecord.score, 'C');
+  assert.equal(cycleRecord.issueCount, 4);
+  assert.equal(cycleRecord.synopsis, 'synthesizer findings');
+});
+
 test('createCycleRecorder records test failure state changes', () => {
   const state = createCycleState(baseStateArgs({}));
   const recorder = createCycleRecorder(state);

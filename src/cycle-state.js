@@ -316,7 +316,14 @@ function recordImplementation(cycleRecord, implementation = {}) {
     implementations: implementation.implementations,
     implementation: implementation.text,
   };
-  if (Array.isArray(implementation.tasks) && implementation.tasks.length === 0) {
+  // Why: a successfully parsed plan with no tasks means the implementer judged the cycle done;
+  // only then do we override the synthesizer's score so a malformed plan parse cannot masquerade
+  // as zero work.
+  if (
+    Array.isArray(implementation.tasks)
+    && implementation.tasks.length === 0
+    && implementation.plan != null
+  ) {
     Object.assign(updates, {
       score: 'A',
       issueCount: 0,

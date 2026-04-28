@@ -260,6 +260,9 @@ function assessmentCompletionFields(state, reportPath) {
     runId: state.store.runId,
     reportPath,
     providers: state.options.providerIds,
+    // synthesizerProvider and implementerProvider both point at the primary provider today;
+    // they are kept as separate published fields so the synthesizer/implementer split can
+    // diverge later without breaking the metadata contract consumed by SKILL.md and tests.
     synthesizerProvider: state.options.primaryProvider.id,
     implementerProvider: state.options.primaryProvider.id,
     unresolvedTestFailure: state.hasUnresolvedTestFailure,

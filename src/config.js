@@ -43,6 +43,12 @@ export async function loadConfig(cwd) {
   if (parsed.providers !== undefined && typeof parsed.providers !== 'string' && !Array.isArray(parsed.providers)) {
     throw new UsageError(`invalid config JSON at ${filePath}: providers must be a string or array`);
   }
+  if (parsed.provider !== undefined && typeof parsed.provider !== 'string') {
+    throw new UsageError(`invalid config JSON at ${filePath}: provider must be a string`);
+  }
+  if (parsed.model !== undefined && typeof parsed.model !== 'string') {
+    throw new UsageError(`invalid config JSON at ${filePath}: model must be a string`);
+  }
   return parsed;
 }
 
