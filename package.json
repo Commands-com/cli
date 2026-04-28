@@ -1,6 +1,6 @@
 {
   "name": "commands-com",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Local-first OSS CLI for review cycles and code quality workflows",
   "keywords": [
