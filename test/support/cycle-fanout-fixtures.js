@@ -35,7 +35,6 @@ export function fanoutDependencies({
   store = memoryStore(),
   logger = {},
   providers = [{ id: 'mock' }],
-  fanoutParallel,
 } = {}) {
   return /** @type {any} */ ({
     context: { repoRoot: '/repo' },
@@ -47,6 +46,5 @@ export function fanoutDependencies({
       timeoutMs: 30_000,
       providerRetries: 0,
     },
-    ...(fanoutParallel === undefined ? {} : { fanoutParallel }),
   });
 }

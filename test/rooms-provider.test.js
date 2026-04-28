@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { runRoomCommand } from '../src/rooms.js';
-import { writeFakeClaudeRoomProvider } from './support/fake-provider.js';
+import { writeFakeClaudeRoomProvider, writeFakeProvider } from './support/fake-provider.js';
 import {
   captureConsoleLogs,
   captureConsoleOutcome,
@@ -171,66 +171,86 @@ test('runRoomCommand retries transient synthesis provider failures', { skip: pro
   });
 });
 
-test('runRoomCommand records parallel room execution and writes synthesis output artifacts in JSON mode', { skip: process.platform === 'win32' }, async () => {
-  await withRoomRun(async (cwd) => {
-    const binDir = path.join(cwd, 'bin');
-    const providerLog = path.join(cwd, 'provider.log');
-    await writeFakeClaudeRoomProvider(binDir);
+// Inline timing-aware fake claude: appends start/end markers to ROOM_PROVIDER_LOG with a
+// participant-only busy-wait so concurrent runs interleave (start, start, end, end) while
+// strictly serial runs pair up (start, end, start, end). Synthesis runs without delay.
+const PARTICIPANT_BUSY_WAIT_MS = 120;
+const TIMING_FAKE_CLAUDE_SCRIPT = [
+  "const fs = require('node:fs');",
+  "const prompt = fs.readFileSync(0, 'utf8');",
+  "const logPath = process.env.ROOM_PROVIDER_LOG;",
+  "const isSynthesis = prompt.includes('You are synthesizing');",
+  "const role = (prompt.match(/You are the ([\\s\\S]*?) in the Commands\\.com/) || [])[1] || 'participant';",
+  "const label = isSynthesis ? 'synthesis' : role;",
+  "const append = (line) => { if (logPath) fs.appendFileSync(logPath, line + '\\n'); };",
+  "append(`start:${label}`);",
+  "if (!isSynthesis) {",
+  `  const until = Date.now() + ${PARTICIPANT_BUSY_WAIT_MS};`,
+  "  while (Date.now() < until) {}",
+  "}",
+  "append(`end:${label}`);",
+  "console.log(JSON.stringify({ text: `Fake ${label} output` }));",
+];
 
-    const outcome = await withEnv({
-      PATH: prependPathEntry(binDir),
-      ROOM_PROVIDER_LOG: providerLog,
-    }, () => captureConsoleOutcome(() => runRoomCommand({
-      positionals: ['security', 'parallel room'],
-      flags: flagMap({ provider: 'claude', participants: '2', parallel: 'true', json: 'true' }),
-    }, { cwd })));
+for (const scenario of [
+  { mode: 'parallel', extraFlags: { parallel: 'true' }, expectedMetadataParallel: true },
+  { mode: 'serial', extraFlags: {}, expectedMetadataParallel: false },
+]) {
+  test(`runRoomCommand ${scenario.mode} fan-out ${scenario.mode === 'parallel' ? 'overlaps' : 'sequences'} participant runs`, { skip: process.platform === 'win32' }, async () => {
+    await withRoomRun(async (cwd) => {
+      const binDir = path.join(cwd, 'bin');
+      const providerLog = path.join(cwd, 'provider.log');
+      await writeFakeProvider(binDir, 'claude', TIMING_FAKE_CLAUDE_SCRIPT);
 
-    assert.equal(outcome.error, null);
-    assert.deepEqual(outcome.result, { failed: false, exitCode: 0 });
-    assert.equal(outcome.logs.length, 1);
-    const payload = JSON.parse(outcome.logs[0]);
-    assert.deepEqual(Object.keys(payload), ROOM_COMPLETED_PAYLOAD_KEYS);
-    assert.equal(payload.type, 'room.completed');
-    assert.equal(payload.roomId, 'security');
-    assert.equal(payload.outputs.length, 2);
-    assert.deepEqual(payload.outputs.map((output) => [output.provider, output.role]), [
-      ['claude', 'threat modeler'],
-      ['claude', 'application security reviewer'],
-    ]);
-    assert.match(payload.synthesis, /Fake synthesis output/);
-    assert.equal(payload.synthesisError, '');
+      const outcome = await withEnv({
+        PATH: prependPathEntry(binDir),
+        ROOM_PROVIDER_LOG: providerLog,
+      }, () => captureConsoleOutcome(() => runRoomCommand({
+        positionals: ['security', `${scenario.mode} fan-out`],
+        flags: flagMap({
+          provider: 'claude',
+          participants: '2',
+          'no-synthesis': 'true',
+          json: 'true',
+          ...scenario.extraFlags,
+        }),
+      }, { cwd })));
 
-    const runDir = path.dirname(payload.reportPath);
-    const metadata = JSON.parse(await fs.readFile(path.join(runDir, 'metadata.json'), 'utf8'));
-    assert.equal(metadata.parallel, true);
-    assert.deepEqual((await fs.readFile(providerLog, 'utf8')).trim().split('\n'), [
-      'participant',
-      'participant',
-      'synthesis',
-    ]);
-    assert.match(
-      await fs.readFile(path.join(runDir, 'prompts', 'claude-threat-modeler.md'), 'utf8'),
-      /commands-com-prompt-intent/,
-    );
-    assert.match(
-      await fs.readFile(path.join(runDir, 'participants', 'claude', 'threat-modeler.md'), 'utf8'),
-      /Fake threat modeler output/,
-    );
-    assert.match(
-      await fs.readFile(path.join(runDir, 'prompts', 'claude-application-security-reviewer.md'), 'utf8'),
-      /commands-com-prompt-intent/,
-    );
-    assert.match(
-      await fs.readFile(path.join(runDir, 'participants', 'claude', 'application-security-reviewer.md'), 'utf8'),
-      /Fake application security reviewer output/,
-    );
-    assert.match(
-      await fs.readFile(path.join(runDir, 'prompts', 'synthesis-claude.md'), 'utf8'),
-      /claude \/ threat modeler/,
-    );
-    assert.match(await fs.readFile(path.join(runDir, 'synthesis.md'), 'utf8'), /Fake synthesis output/);
+      assert.equal(outcome.error, null);
+      assert.deepEqual(outcome.result, { failed: false, exitCode: 0 });
+      assert.equal(outcome.logs.length, 1);
+      const payload = JSON.parse(outcome.logs[0]);
+      assert.deepEqual(Object.keys(payload), ROOM_COMPLETED_PAYLOAD_KEYS);
+      assert.equal(payload.outputs.length, 2);
+
+      const events = (await fs.readFile(providerLog, 'utf8')).trim().split('\n');
+      assert.equal(events.length, 4, 'two participants must each emit a start and end marker');
+
+      const firstEndIndex = events.findIndex((line) => line.startsWith('end:'));
+      const startsBeforeFirstEnd = events
+        .slice(0, firstEndIndex)
+        .filter((line) => line.startsWith('start:')).length;
+
+      if (scenario.mode === 'parallel') {
+        assert.equal(
+          startsBeforeFirstEnd,
+          2,
+          '--parallel must overlap participants: both starts must precede any end',
+        );
+      } else {
+        assert.equal(
+          startsBeforeFirstEnd,
+          1,
+          'serial mode must run participants strictly sequentially (one start per end)',
+        );
+      }
+
+      const runDir = path.dirname(payload.reportPath);
+      const metadata = JSON.parse(await fs.readFile(path.join(runDir, 'metadata.json'), 'utf8'));
+      assert.equal(metadata.parallel, scenario.expectedMetadataParallel);
+    });
   });
-});
+}
 
 for (const scenario of [
   {

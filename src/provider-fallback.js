@@ -16,6 +16,9 @@ export async function runWithProviderFallback({
   onFallback,
   isTransient = isTransientProviderError,
 }) {
+  if (!Array.isArray(providerChain) || providerChain.length === 0) {
+    throw new Error('runWithProviderFallback called with empty providerChain');
+  }
   let lastError;
   for (let index = 0; index < providerChain.length; index += 1) {
     const provider = providerChain[index];

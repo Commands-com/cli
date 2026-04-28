@@ -14,7 +14,6 @@ test('runAssessmentProviderFanout uses internal failure artifact hook and ignore
     runAssessmentProviderFanout(fanoutDependencies({
       store,
       providers: [{ id: 'unsupported-test-provider' }],
-      fanoutParallel: false,
     }), {
       cycle: 8,
       writeFailureArtifact: () => {
