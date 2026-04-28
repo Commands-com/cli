@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { COMMAND_OPTIONS, OPTION_READER_NAMES } from '../src/command-option-schema.js';
+import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
+import { OPTION_READER_NAMES } from '../src/command-option-resolvers.js';
 import { readCommandOptionValue } from '../src/command-options.js';
 import { buildImplementationPlanPrompt, buildImplementationTaskPrompt } from '../src/implementation-prompts.js';
 import { splitPromptIntent } from '../src/prompt-intent.js';

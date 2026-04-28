@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { parseArgs } from '../src/args.js';
 import { COMMAND_OPTIONS } from '../src/command-option-schema.js';
 import {
+  filterKnownStoredCycleOptions,
   hasAnyFlag,
   hasFlag,
   normalizeFlags,
@@ -179,6 +180,34 @@ test('hasFlag normalizes map and object flag shapes', () => {
   assert.equal(hasFlag({ json: false }, 'json'), true);
   assert.equal(hasFlag({ json: '' }, 'json'), true);
   assert.equal(hasFlag({}, 'json'), false);
+});
+
+test('filterKnownStoredCycleOptions drops unknown stored fields and warns once', () => {
+  const warnCalls = [];
+  const logger = { warn: (...args) => warnCalls.push(args) };
+  const stored = {
+    fix: true,
+    maxCycles: 5,
+    untilScore: 'A',
+    model: 'gpt-5',
+    bogusField: 'x',
+    anotherStale: 42,
+  };
+
+  const filtered = filterKnownStoredCycleOptions(stored, { logger });
+
+  assert.deepEqual(filtered, {
+    fix: true,
+    maxCycles: 5,
+    untilScore: 'A',
+    model: 'gpt-5',
+  });
+  assert.equal(Object.hasOwn(filtered, 'bogusField'), false);
+  assert.equal(Object.hasOwn(filtered, 'anotherStale'), false);
+  assert.equal(warnCalls.length, 1);
+  const message = warnCalls[0].map(String).join(' ');
+  assert.match(message, /bogusField/);
+  assert.match(message, /anotherStale/);
 });
 
 test('shared flag helpers centralize presence checks and direct option reads', () => {

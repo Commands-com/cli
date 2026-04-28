@@ -3,12 +3,14 @@ import {
   COMMAND_OPTIONS,
   COMMON,
   HELP_COMMANDS,
-  OPTION_READER_NAMES,
-  OPTION_RESOLVER,
-  OPTION_RESOLVER_FIELD_GROUP,
   OPTION_SCOPES,
   SCOPED_OPTION_COMMANDS,
 } from './command-option-schema.js';
+import {
+  OPTION_READER_NAMES,
+  OPTION_RESOLVER,
+  OPTION_RESOLVER_FIELD_GROUP,
+} from './command-option-resolvers.js';
 import { REGISTERED_DISPATCH_NAMES } from './command-registry.js';
 import { UsageError } from './errors.js';
 import { SCORE_ORDER } from './summary-contract.js';
