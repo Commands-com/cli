@@ -261,15 +261,18 @@ export async function runAssessmentCycles(state, adapter) {
     });
 
     const outputSummary = adapter.summarizeOutputs({ ...cycleContext, outputs });
-    const synthesisPrompt = adapter.buildSynthesisPrompt({ ...cycleContext, outputs });
-    const { synthesisProvider, synthesisText, synthesisError } = await runSynthesisWithFallback(phaseView, {
-      cycle,
-      prompt: synthesisPrompt,
-      fallbackDescription: adapter.synthesisFallbackDescription,
+    const {
+      synthesisProvider,
+      synthesisText,
+      synthesisError,
+      cycleSummary,
+    } = await maybeSynthesizeOutputs({
+      adapter,
+      phaseView,
+      cycleContext,
+      outputs,
+      outputSummary,
     });
-    const cycleSummary = synthesisText.trim()
-      ? adapter.summarizeSynthesis({ ...cycleContext, outputs, outputSummary, synthesisText })
-      : outputSummary;
 
     const adapterCycleRecord = adapter.buildCycleRecord({
       ...cycleContext,
@@ -326,10 +329,50 @@ export async function runAssessmentCycles(state, adapter) {
       testFailureUpdates: implementationHandoff.testFailureUpdates,
     });
     await writeRunState(state, { status: 'running' });
+    if (implementationHasNoTasks(implementationPhase.result)) {
+      break;
+    }
     if (implementationPhase.status === IMPLEMENTATION_PHASE_STATUS.PARTIAL) {
       throw implementationPhase.error || new Error(`cycle ${cycle}: implementation failed after partial result`);
     }
   }
+}
+
+async function maybeSynthesizeOutputs({
+  adapter,
+  phaseView,
+  cycleContext,
+  outputs,
+  outputSummary,
+}) {
+  if (outputs.length <= 1) {
+    return {
+      synthesisProvider: '',
+      synthesisText: '',
+      synthesisError: '',
+      cycleSummary: outputSummary,
+    };
+  }
+
+  const synthesisPrompt = adapter.buildSynthesisPrompt({ ...cycleContext, outputs });
+  const { synthesisProvider, synthesisText, synthesisError } = await runSynthesisWithFallback(phaseView, {
+    cycle: cycleContext.cycle,
+    prompt: synthesisPrompt,
+    fallbackDescription: adapter.synthesisFallbackDescription,
+  });
+  return {
+    synthesisProvider,
+    synthesisText,
+    synthesisError,
+    cycleSummary: synthesisText.trim()
+      ? adapter.summarizeSynthesis({ ...cycleContext, outputs, outputSummary, synthesisText })
+      : outputSummary,
+  };
+}
+
+function implementationHasNoTasks(result) {
+  return Array.isArray(result?.implementation?.tasks)
+    && result.implementation.tasks.length === 0;
 }
 
 /**

@@ -40,6 +40,7 @@ export const IMPLEMENTATION_PHASE_STATUS = Object.freeze({ COMPLETED: 'completed
 const IMPLEMENTATION_BATCH_STATUS = Object.freeze({ COMPLETED: 'completed', FAILED: 'failed' });
 
 function formatImplementationResults(implementations) {
+  if (!implementations.length) return 'No implementation tasks were returned.';
   return implementations
     .map((implementation) => `## ${implementation.task.id}: ${implementation.task.title}\n\n${implementation.text}`)
     .join('\n\n');
@@ -253,7 +254,9 @@ export async function runOrchestratedImplementationPhase({
   });
   await writeJsonArtifact(store, cycleArtifactPath(cycle, 'tasks.json'), tasks);
   output.info(`cycle ${cycle}: implementation plan (${tasks.length} task(s), ${batches.length} batch(es), cap ${maxTasks})`);
-  if (useTaskWorktrees) {
+  if (tasks.length === 0) {
+    output.info(`cycle ${cycle}: no actionable implementation tasks`);
+  } else if (useTaskWorktrees) {
     output.info(`cycle ${cycle}: task worktrees (${tasks.length})`);
   } else if (executionMode === IMPLEMENTATION_EXECUTION_MODES.SERIAL_DIRECT && tasks.length > 1) {
     output.info(`cycle ${cycle}: task worktrees unavailable; running implementers serially in direct workspace`);

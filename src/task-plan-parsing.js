@@ -63,7 +63,7 @@ function fallbackPlan(instructions = '') {
 function rawPlanTasks(text) {
   try {
     const parsed = JSON.parse(jsonBlock(text));
-    return Array.isArray(parsed?.tasks) && parsed.tasks.length ? parsed.tasks : null;
+    return Array.isArray(parsed?.tasks) ? parsed.tasks : null;
   } catch {
     return null;
   }

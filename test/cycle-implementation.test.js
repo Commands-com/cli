@@ -118,6 +118,49 @@ test('runImplementationAndValidationPhase records implementation results and fai
   }
 });
 
+test('runImplementationAndValidationPhase preserves explicit empty plans as no-op results', async () => {
+  const cwd = await tempDir();
+  try {
+    const providerPath = await writeFakeProvider(path.join(cwd, 'bin'), 'codex', [
+      '#!/usr/bin/env node',
+      "const fs = require('node:fs');",
+      "const prompt = fs.readFileSync(0, 'utf8');",
+      "function complete(text) { console.log(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text } })); }",
+      'if (prompt.includes(\'"kind":"implementation-plan"\')) { complete(\'```json\\n{"tasks":[]}\\n```\'); process.exit(0); }',
+      "console.error('unexpected implementation task');",
+      'process.exit(9);',
+    ]);
+    const state = testState(cwd, {
+      providers: [{ id: 'codex', command: providerPath }],
+      primaryProvider: { id: 'codex', command: providerPath },
+    });
+    const recorder = createCycleRecorder(state);
+    const cycleRecord = recorder.beginCycle(1, {
+      score: 'C',
+      issueCount: 2,
+      synopsis: 'Only gated findings remain.',
+    });
+
+    const phase = await runImplementationAndValidationPhase(createCyclePhaseView(state), {
+      cycle: 1,
+      objective: 'Handle empty implementation plan',
+      findings: 'No actionable findings.',
+    });
+    recorder.applyImplementationResult(cycleRecord, phase.result);
+
+    assert.equal(phase.status, IMPLEMENTATION_PHASE_STATUS.COMPLETED);
+    assert.deepEqual(phase.result.implementation.tasks, []);
+    assert.deepEqual(phase.result.implementation.batches, []);
+    assert.deepEqual(phase.result.implementation.implementations, []);
+    assert.equal(phase.result.implementation.text, 'No implementation tasks were returned.');
+    assert.equal(cycleRecord.score, 'A');
+    assert.equal(cycleRecord.issueCount, 0);
+    assert.equal(cycleRecord.synopsis, 'No actionable implementation tasks were returned.');
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
 test('runImplementationAndValidationPhase preserves partial result when validation artifact write fails', { skip: process.platform === 'win32' }, async () => {
   const tmp = await tempDir();
   try {

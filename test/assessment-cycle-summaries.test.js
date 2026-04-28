@@ -79,6 +79,7 @@ async function writeGenericProviderText(binDir, commandName, text) {
 function createFakeAdapter({
   outputIssueCount = 0,
   synthesisIssueCount = outputIssueCount,
+  items = ['fake-area'],
   includeOptionalHooks = false,
   calls = [],
   implementation = () => ({ objective: 'Fix fake assessment issues' }),
@@ -91,7 +92,11 @@ function createFakeAdapter({
     synthesisFallbackDescription: 'fake provider summaries',
     fanout({ cycle }) {
       return {
-        items: [{ value: 'fake-area', label: 'Fake area', pathSegment: 'fake-area' }],
+        items: items.map((item) => ({
+          value: item,
+          label: String(item),
+          pathSegment: String(item),
+        })),
         label: 'fake fan-out',
         adapter: {
           artifactRoot: 'fake',
@@ -173,7 +178,7 @@ function createFakeAdapter({
   return adapter;
 }
 
-test('runAssessmentCycles calls output and synthesis summary hooks separately', async () => {
+test('runAssessmentCycles calls output and synthesis summary hooks separately for multiple outputs', async () => {
   const cwd = await tempDir();
   try {
     const calls = [];
@@ -181,6 +186,7 @@ test('runAssessmentCycles calls output and synthesis summary hooks separately', 
     const adapter = createFakeAdapter({
       outputIssueCount: 3,
       synthesisIssueCount: 0,
+      items: ['fake-area', 'second-area'],
       calls,
     });
 
@@ -188,7 +194,7 @@ test('runAssessmentCycles calls output and synthesis summary hooks separately', 
 
     const summaryCalls = calls.filter((call) => ['summarizeOutputs', 'summarizeSynthesis'].includes(call.hook));
     assert.deepEqual(summaryCalls.map((call) => call.hook), ['summarizeOutputs', 'summarizeSynthesis']);
-    assert.equal(summaryCalls[0].outputs.length, 1);
+    assert.equal(summaryCalls[0].outputs.length, 2);
     assert.equal(summaryCalls[0].outputs[0].provider, 'mock');
     assert.equal(summaryCalls[1].outputSummary.issueCount, 3);
     assert.match(summaryCalls[1].synthesisText, /issue_count: 0/);
@@ -196,6 +202,33 @@ test('runAssessmentCycles calls output and synthesis summary hooks separately', 
     assert.equal(state.cycles[0].usedOutputSummary, false);
     assert.equal(state.cycles[0].issueCount, 0);
     assert.equal(state.cycles[0].outputIssueCount, 3);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('runAssessmentCycles skips synthesis for a single assessment output', async () => {
+  const cwd = await tempDir();
+  try {
+    const calls = [];
+    const state = testState(cwd);
+    const adapter = createFakeAdapter({
+      outputIssueCount: 2,
+      synthesisIssueCount: 0,
+      calls,
+    });
+
+    await runAssessmentCycles(state, adapter);
+
+    const summaryCalls = calls.filter((call) => ['summarizeOutputs', 'summarizeSynthesis'].includes(call.hook));
+    assert.deepEqual(summaryCalls.map((call) => call.hook), ['summarizeOutputs']);
+    assert.equal(state.cycles[0].source, 'outputs');
+    assert.equal(state.cycles[0].usedOutputSummary, true);
+    assert.equal(state.cycles[0].issueCount, 2);
+    assert.equal(state.cycles[0].synthesisProvider, '');
+    assert.equal(state.cycles[0].synthesis, '');
+    assert.equal(state.cycles[0].synthesisError, '');
+    assert.match(state.priorFindings, /^## Synthesis\n\(none\)/);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }
@@ -209,6 +242,7 @@ test('runAssessmentCycles summarizes outputs once for each completed fan-out', a
     const adapter = createFakeAdapter({
       outputIssueCount: 1,
       synthesisIssueCount: 1,
+      items: ['fake-area', 'second-area'],
       calls,
     });
 
@@ -223,7 +257,7 @@ test('runAssessmentCycles summarizes outputs once for each completed fan-out', a
       '2:summarizeSynthesis',
     ]);
     assert.equal(outputSummaries.length, 2);
-    assert.deepEqual(outputSummaries.map((call) => call.outputs.length), [1, 1]);
+    assert.deepEqual(outputSummaries.map((call) => call.outputs.length), [2, 2]);
     assert.deepEqual(outputSummaries.map((call) => call.outputs[0].provider), ['mock', 'mock']);
     assert.equal(state.cycles.length, 2);
   } finally {
@@ -242,6 +276,7 @@ test('runAssessmentCycles falls back to provider output summary when synthesis f
     const adapter = createFakeAdapter({
       outputIssueCount: 0,
       synthesisIssueCount: 1,
+      items: ['fake-area', 'second-area'],
       calls,
       summarizeOutputs: () => {
         calls.push({ hook: 'summarizeOutputs' });
@@ -289,6 +324,7 @@ test('runAssessmentCycles falls back to provider output summary when synthesis o
     const adapter = createFakeAdapter({
       outputIssueCount: 2,
       synthesisIssueCount: 0,
+      items: ['fake-area', 'second-area'],
       calls,
     });
 

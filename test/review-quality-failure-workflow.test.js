@@ -13,12 +13,17 @@ import {
   parsed,
   tempDir,
   initGitRepo,
-  writeCountingCodex,
   writeRetryOnceCodex,
   writeSecondCycleFailureCodex,
   writePartialSecondCycleFailureCodex,
   commandPathFromLog,
 } from './support/review-quality-workflow-fixtures.js';
+import {
+  emitClaudeResult,
+  emitCodexError,
+  emitCodexMessage,
+  writeFakeProvider,
+} from './support/fake-provider.js';
 
 test('runReviewCommand logs provider retry and keeps reviewer artifact path stable', { skip: process.platform === 'win32' }, async () => {
   const cwd = await tempDir();
@@ -64,21 +69,26 @@ test('runReviewCommand falls back to reviewer summaries when synthesis fails', {
       'codex fake review finding',
     ].join('\n');
     const binDir = path.join(cwd, 'bin');
-    await writeCountingCodex(binDir, {
-      firstText: reviewText,
-      failureMessage: 'synthesis failed hard',
-    });
+    await writeFakeProvider(binDir, 'codex', [
+      "const fs = require('node:fs');",
+      "const prompt = fs.readFileSync(0, 'utf8');",
+      "if (prompt.includes('\"kind\":\"review-synthesis\"')) {",
+      `  ${emitCodexError('synthesis failed hard')}`,
+      '  process.exit(1);',
+      '}',
+      emitCodexMessage(reviewText),
+    ]);
 
     const result = await captureCommand(
       runReviewCommand,
-      parsed(['fallback'], { provider: 'codex', reviewers: 'correctness', json: 'true' }),
+      parsed(['fallback'], { provider: 'codex', reviewers: 'correctness,tests', json: 'true' }),
       cwd,
       { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } },
     );
     const output = JSON.parse(result.stdout);
 
-    assert.equal(output.cycles[0].issueCount, 2);
-    assert.equal(output.cycles[0].reviewerIssueCount, 2);
+    assert.equal(output.cycles[0].issueCount, 4);
+    assert.equal(output.cycles[0].reviewerIssueCount, 4);
     assert.equal(output.cycles[0].synthesis, '');
     assert.match(output.cycles[0].synthesisError, /codex exited with 1/);
     assert.match(output.cycles[0].synthesisError, /synthesis failed hard/);
@@ -108,14 +118,38 @@ test('runQualityCommand falls back to provider summaries when synthesis fails', 
       'codex fake quality finding',
     ].join('\n');
     const binDir = path.join(cwd, 'bin');
-    await writeCountingCodex(binDir, {
-      firstText: auditText,
-      failureMessage: 'quality synthesis failed hard',
-    });
+    const cleanText = [
+      '```yaml',
+      'score: A',
+      'verdict: clean',
+      'issue_count: 0',
+      'summary: Claude found no maintainability issues.',
+      '```',
+      '',
+      'claude fake quality finding',
+    ].join('\n');
+    await writeFakeProvider(binDir, 'codex', [
+      "const fs = require('node:fs');",
+      "const prompt = fs.readFileSync(0, 'utf8');",
+      "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+      `  ${emitCodexError('quality synthesis failed hard')}`,
+      '  process.exit(1);',
+      '}',
+      emitCodexMessage(auditText),
+    ]);
+    await writeFakeProvider(binDir, 'claude', [
+      "const fs = require('node:fs');",
+      "const prompt = fs.readFileSync(0, 'utf8');",
+      "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+      "  console.error('claude quality synthesis failed hard');",
+      '  process.exit(1);',
+      '}',
+      emitClaudeResult(cleanText),
+    ]);
 
     const result = await captureCommand(
       runQualityCommand,
-      parsed([], { provider: 'codex', area: 'maintainability', json: 'true' }),
+      parsed([], { providers: 'codex,claude', area: 'maintainability', json: 'true' }),
       cwd,
       { env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` } },
     );

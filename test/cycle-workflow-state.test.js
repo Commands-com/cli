@@ -306,6 +306,32 @@ test('applyImplementationResult records successful implementation state', () => 
   assert.equal(state.priorFindings, 'remaining findings');
 });
 
+test('applyImplementationResult treats an empty implementation plan as convergence', () => {
+  const state = testState();
+  const recorder = createCycleRecorder(state);
+  const cycleRecord = recorder.beginCycle(1, {
+    score: 'C',
+    issueCount: 2,
+    synopsis: 'Low-severity gated findings remain.',
+  });
+
+  recorder.applyImplementationResult(cycleRecord, {
+    implementation: {
+      plan: '{"tasks":[]}',
+      tasks: [],
+      batches: [],
+      implementations: [],
+      text: 'No implementation tasks were returned.',
+    },
+  });
+
+  assert.equal(cycleRecord.score, 'A');
+  assert.equal(cycleRecord.issueCount, 0);
+  assert.equal(cycleRecord.synopsis, 'No actionable implementation tasks were returned.');
+  assert.deepEqual(cycleRecord.implementationTasks, []);
+  assert.deepEqual(cycleRecord.implementationBatches, []);
+});
+
 test('applyImplementationResult applies validation failure updates', () => {
   const state = testState();
   const recorder = createCycleRecorder(state);

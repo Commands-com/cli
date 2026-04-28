@@ -94,18 +94,10 @@ test('parseImplementationPlan uses one fallback task for malformed JSON', () => 
   ]);
 });
 
-test('parseImplementationPlan uses the same fallback for empty task arrays', () => {
+test('parseImplementationPlan treats an empty task array as an explicit no-op plan', () => {
   const tasks = parseImplementationPlan('{"tasks":[]}', { fallbackInstructions: 'fix empty plan safely' });
 
-  assert.deepEqual(tasks, [
-    {
-      id: 'task-1',
-      title: 'Implement synthesized findings',
-      files: [],
-      instructions: 'fix empty plan safely',
-      order: 1,
-    },
-  ]);
+  assert.deepEqual(tasks, []);
 });
 
 test('parseImplementationPlan normalizes incomplete task entries without plan fallback', () => {

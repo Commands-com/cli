@@ -343,13 +343,21 @@ function setUnresolvedTestFailure(state, value) {
 }
 
 function recordImplementation(cycleRecord, implementation = {}) {
-  return applyCycleRecordUpdates(cycleRecord, {
+  const updates = {
     implementationPlan: implementation.plan,
     implementationTasks: implementation.tasks,
     implementationBatches: implementation.batches,
     implementations: implementation.implementations,
     implementation: implementation.text,
-  });
+  };
+  if (Array.isArray(implementation.tasks) && implementation.tasks.length === 0) {
+    Object.assign(updates, {
+      score: 'A',
+      issueCount: 0,
+      synopsis: 'No actionable implementation tasks were returned.',
+    });
+  }
+  return applyCycleRecordUpdates(cycleRecord, updates);
 }
 
 function recordTestResult(state, cycleRecord, testResult, { testFailureUpdates } = /** @type {{ testFailureUpdates?: Object }} */ ({})) {

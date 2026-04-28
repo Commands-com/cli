@@ -133,8 +133,8 @@ test('quality json includes score, synopsis, and final outputs', () => withTempD
   assert.equal(parsed.synthesizerProvider, 'mock');
   assert.equal(parsed.score, 'B');
   assert.equal(parsed.issueCount, 1);
-  assert.match(parsed.synopsis, /Mock quality synthesis/);
-  assert.match(parsed.cycles[0].synthesis, /Mock quality synthesis/);
+  assert.match(parsed.synopsis, /One mock quality issue/);
+  assert.equal(parsed.cycles[0].synthesis, '');
   assert.equal(parsed.outputs[0].area, 'maintainability');
   assert.equal(parsed.outputs[0].provider, 'mock');
   assert.equal(parsed.outputs[0].score, 'B');
@@ -184,23 +184,46 @@ test('quality falls back to provider summaries when synthesis fails', () => with
   const auditText = qualityProviderText({
     summary: 'Codex found one maintainability issue.',
   }, 'codex fake quality finding');
-  await writeFakeProvider(binDir, 'codex', countedCodexProviderScript({
-    first: emitCodexMessage(auditText),
-    retry: emitCodexError('model overloaded during synthesis'),
-    retryExits: true,
-  }));
+  const cleanText = [
+    '```yaml',
+    'score: A',
+    'verdict: clean',
+    'issue_count: 0',
+    'summary: Claude found no maintainability issues.',
+    '```',
+    '',
+    'claude fake quality finding',
+  ].join('\n');
+  await writeFakeProvider(binDir, 'codex', [
+    "const fs = require('node:fs');",
+    "const prompt = fs.readFileSync(0, 'utf8');",
+    "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+    `  ${emitCodexError('model overloaded during synthesis')}`,
+    '  process.exit(1);',
+    '}',
+    emitCodexMessage(auditText),
+  ]);
+  await writeFakeProvider(binDir, 'claude', [
+    "const fs = require('node:fs');",
+    "const prompt = fs.readFileSync(0, 'utf8');",
+    "if (prompt.includes('\"kind\":\"quality-synthesis\"')) {",
+    "  console.error('claude synthesis unavailable');",
+    '  process.exit(1);',
+    '}',
+    emitClaudeResult(cleanText),
+  ]);
 
-  const result = await runCli(['quality', '--provider', 'codex', '--area', 'maintainability', '--json'], cwd, {
-    env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` },
+  const result = await runCli(['quality', '--providers', 'all', '--area', 'maintainability', '--json'], cwd, {
+    env: { PATH: binDir },
   });
   const parsed = assertCliOk(result);
   assert.equal(parsed.score, 'B');
   assert.equal(parsed.issueCount, 1);
   assert.equal(parsed.cycles[0].synthesis, '');
-  assert.match(parsed.cycles[0].synthesisError, /codex exited with 1/);
-  assert.match(parsed.cycles[0].synthesisError, /model overloaded during synthesis/);
+  assert.match(parsed.cycles[0].synthesisError, /claude exited with 1/);
+  assert.match(parsed.cycles[0].synthesisError, /claude synthesis unavailable/);
   const runDir = path.dirname(parsed.reportPath);
-  assert.match(await fs.readFile(path.join(runDir, 'cycle-1', 'synthesis-error.md'), 'utf8'), /model overloaded/);
+  assert.match(await fs.readFile(path.join(runDir, 'cycle-1', 'synthesis-error.md'), 'utf8'), /claude synthesis unavailable/);
   assert.match(await fs.readFile(parsed.reportPath, 'utf8'), /Synthesis Error/);
 }));
 
@@ -219,7 +242,7 @@ test('quality --fix implements then re-reviews', () => withGitTempDir(async (cwd
   const parsed = assertCliOk(result);
   assert.equal(parsed.cycles.length, 2);
   assert.equal(parsed.cycles[0].score, 'B');
-  assert.match(parsed.cycles[0].synthesis, /Mock quality synthesis/);
+  assert.equal(parsed.cycles[0].synthesis, '');
   assert.deepEqual(parsed.cycles[0].implementationBatches, [['task-1', 'task-2']]);
   assert.equal(parsed.cycles[0].implementations.length, 2);
   assert.match(parsed.cycles[0].implementation, /Mock implementer/);
@@ -289,18 +312,22 @@ test('review --providers all fans out across available provider CLIs and synthes
 test('review falls back to reviewer summaries when synthesis fails', () => withTempDir(async (cwd) => {
   const binDir = path.join(cwd, 'bin');
   const reviewText = reviewProviderText({ issueCount: 2 }, 'codex fake review finding');
-  await writeFakeProvider(binDir, 'codex', countedCodexProviderScript({
-    first: emitCodexMessage(reviewText),
-    retry: emitCodexError('synthesis quota exhausted'),
-    retryExits: true,
-  }));
+  await writeFakeProvider(binDir, 'codex', [
+    "const fs = require('node:fs');",
+    "const prompt = fs.readFileSync(0, 'utf8');",
+    "if (prompt.includes('\"kind\":\"review-synthesis\"')) {",
+    `  ${emitCodexError('synthesis quota exhausted')}`,
+    '  process.exit(1);',
+    '}',
+    emitCodexMessage(reviewText),
+  ]);
 
-  const result = await runCli(['review', 'synthesis fallback', '--provider', 'codex', '--reviewers', 'correctness', '--json'], cwd, {
+  const result = await runCli(['review', 'synthesis fallback', '--provider', 'codex', '--reviewers', 'correctness,tests', '--json'], cwd, {
     env: { PATH: `${binDir}${path.delimiter}${process.env.PATH || ''}` },
   });
   const parsed = assertCliOk(result);
-  assert.equal(parsed.cycles[0].issueCount, 2);
-  assert.equal(parsed.cycles[0].reviewerIssueCount, 2);
+  assert.equal(parsed.cycles[0].issueCount, 4);
+  assert.equal(parsed.cycles[0].reviewerIssueCount, 4);
   assert.equal(parsed.cycles[0].synthesis, '');
   assert.match(parsed.cycles[0].synthesisError, /codex exited with 1/);
   assert.match(parsed.cycles[0].synthesisError, /synthesis quota exhausted/);

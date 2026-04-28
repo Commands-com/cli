@@ -388,7 +388,7 @@ test('implementation validation writes normalized planner, implementer, test, an
   }
 });
 
-test('quality workflow writes normalized cycle, synthesis, mirrored area, and report artifacts', async () => {
+test('quality workflow writes normalized single-output cycle, mirrored area, and report artifacts', async () => {
   const cwd = await tempDir();
   try {
     const logger = testLogger();
@@ -414,15 +414,15 @@ test('quality workflow writes normalized cycle, synthesis, mirrored area, and re
       await fs.readFile(path.join(runDir, 'areas', 'mock', 'maintainability-architecture.md'), 'utf8'),
       /Mock provider finding/,
     );
-    assert.match(await fs.readFile(path.join(runDir, 'prompts', 'cycle-1-synthesis-mock.md'), 'utf8'), /Provider outputs:/);
-    assert.match(await fs.readFile(path.join(runDir, 'cycle-1', 'synthesis.md'), 'utf8'), /Mock quality synthesis/);
+    await assert.rejects(fs.stat(path.join(runDir, 'prompts', 'cycle-1-synthesis-mock.md')), /ENOENT/);
+    await assert.rejects(fs.stat(path.join(runDir, 'cycle-1', 'synthesis.md')), /ENOENT/);
     assert.match(await fs.readFile(path.join(runDir, 'code-quality.md'), 'utf8'), /# Code Quality Report/);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }
 });
 
-test('review workflow writes normalized cycle reviewer, synthesis, and report artifacts', async () => {
+test('review workflow writes normalized single-output reviewer and report artifacts', async () => {
   const cwd = await tempDir();
   try {
     const logger = testLogger();
@@ -444,8 +444,8 @@ test('review workflow writes normalized cycle reviewer, synthesis, and report ar
       await fs.readFile(path.join(runDir, 'cycle-1', 'reviewers', 'mock', '01-correctness-tests.md'), 'utf8'),
       /Mock provider finding/,
     );
-    assert.match(await fs.readFile(path.join(runDir, 'prompts', 'cycle-1-synthesis-mock.md'), 'utf8'), /Reviewer outputs:/);
-    assert.match(await fs.readFile(path.join(runDir, 'cycle-1', 'synthesis.md'), 'utf8'), /Mock synthesis/);
+    await assert.rejects(fs.stat(path.join(runDir, 'prompts', 'cycle-1-synthesis-mock.md')), /ENOENT/);
+    await assert.rejects(fs.stat(path.join(runDir, 'cycle-1', 'synthesis.md')), /ENOENT/);
     assert.match(await fs.readFile(path.join(runDir, 'review-cycle.md'), 'utf8'), /# Review Cycle: Normalize artifact paths/);
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });

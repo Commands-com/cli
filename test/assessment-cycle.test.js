@@ -7,6 +7,7 @@ import { createCycleState } from '../src/cycle-state.js';
 import { runCycleWorkflow } from '../src/cycle-workflow.js';
 import { tempDir } from './support/cli.js';
 import { memoryStore } from './support/memory-store.js';
+import { emitCodexMessage, writeFakeProvider } from './support/fake-provider.js';
 
 function flags(entries = []) { return new Map(entries); }
 
@@ -246,11 +247,11 @@ test('runAssessmentCycles stops after a successful clean cycle without implement
     await runAssessmentCycles(state, adapter);
 
     assert.equal(state.cycles.length, 1);
-    assert.equal(state.cycles[0].source, 'synthesis');
+    assert.equal(state.cycles[0].source, 'outputs');
     assert.equal(state.cycles[0].issueCount, 0);
     assert.deepEqual(state.cycles[0].fanoutFailures, []);
-    assert.equal(state.cycles[0].synthesisProvider, 'mock');
-    assert.match(state.cycles[0].synthesis, /verdict: clean/);
+    assert.equal(state.cycles[0].synthesisProvider, '');
+    assert.equal(state.cycles[0].synthesis, '');
     assert.equal(state.cycles[0].implementation, undefined);
     assert.equal(calls.some((call) => call.hook === 'implementation'), false);
     assert.deepEqual(
@@ -258,8 +259,6 @@ test('runAssessmentCycles stops after a successful clean cycle without implement
       [
         'prompts/cycle-1-mock-fake-area.md',
         'cycle-1/fake/mock/fake-area.md',
-        'prompts/cycle-1-synthesis-mock.md',
-        'cycle-1/synthesis.md',
       ],
     );
   } finally {
@@ -364,6 +363,50 @@ test('runAssessmentCycles hands fixable cycle records to implementation', async 
     assert.deepEqual(cycleRecord.implementationBatches, [['task-1']]);
     assert.equal(cycleRecord.implementations[0].provider, 'mock');
     assert.match(cycleRecord.implementation, /Mock implementer/);
+  } finally {
+    await fs.rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test('runAssessmentCycles stops after an explicit empty implementation plan converges the cycle', async () => {
+  const cwd = await tempDir();
+  try {
+    const providerPath = await writeFakeProvider(path.join(cwd, 'bin'), 'codex', [
+      "const fs = require('node:fs');",
+      "const prompt = fs.readFileSync(0, 'utf8');",
+      "if (prompt.includes('\"kind\":\"implementation-plan\"')) {",
+      `  ${emitCodexMessage('```json\\n{"tasks":[]}\\n```')}`,
+      '  process.exit(0);',
+      '}',
+      "if (prompt.includes('\"kind\":\"implementation-task\"')) {",
+      "  console.error('implementation task should not run');",
+      '  process.exit(9);',
+      '}',
+      emitCodexMessage([
+        '```yaml',
+        'score: B',
+        'verdict: issues',
+        'issue_count: 1',
+        'summary: One gated issue remains.',
+        '```',
+      ].join('\n')),
+    ]);
+    const state = testState(cwd, {
+      providers: [{ id: 'codex', command: providerPath }],
+      fix: true,
+      maxCycles: 3,
+    });
+    const adapter = createFakeAdapter({ outputIssueCount: 1 });
+
+    await runAssessmentCycles(state, adapter);
+
+    assert.equal(state.cycles.length, 1);
+    assert.equal(state.cycles[0].score, 'A');
+    assert.equal(state.cycles[0].issueCount, 0);
+    assert.equal(state.cycles[0].synopsis, 'No actionable implementation tasks were returned.');
+    assert.deepEqual(state.cycles[0].implementationTasks, []);
+    assert.deepEqual(state.cycles[0].implementationBatches, []);
+    assert.equal(state.cycles[0].implementation, 'No implementation tasks were returned.');
   } finally {
     await fs.rm(cwd, { recursive: true, force: true });
   }
@@ -534,7 +577,7 @@ test('runAssessmentCycles supports optional start and after-cycle hooks', async 
     assert.equal(hookCalls[1].args.cycleRecord, stateWithHooks.cycles[0]);
     assert.match(hookCalls[1].args.runContext.priorFindings, /^## Synthesis/);
     assert.equal(hookCalls[1].args.outputSummary.source, 'outputs');
-    assert.equal(hookCalls[1].args.cycleSummary.source, 'synthesis');
+    assert.equal(hookCalls[1].args.cycleSummary.source, 'outputs');
 
     const stateWithoutHooks = testState(cwd, { fix: false });
     await runAssessmentCycles(stateWithoutHooks, createFakeAdapter());

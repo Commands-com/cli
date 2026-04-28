@@ -71,7 +71,8 @@ test('runReviewCommand JSON contract includes report path and content', async ()
     const report = await fs.readFile(output.reportPath, 'utf8');
     assert.match(report, /# Review Cycle: contract review/);
     assert.match(report, /Reviewer issue count: 1/);
-    assert.match(report, /Mock synthesis/);
+    assert.match(report, /One mock review issue/);
+    assert.equal(output.cycles[0].synthesis, '');
     assert.equal(
       await fs.readFile(path.join(path.dirname(output.reportPath), 'prompts/cycle-1-mock-01-correctness.md'), 'utf8')
         .then((text) => text.includes('You are the correctness reviewer in a Commands.com review cycle.')),
@@ -105,7 +106,8 @@ test('runQualityCommand JSON contract includes final score and report content', 
     const report = await fs.readFile(output.reportPath, 'utf8');
     assert.match(report, /# Code Quality Report/);
     assert.match(report, /Score: B/);
-    assert.match(report, /Mock quality synthesis/);
+    assert.match(report, /One mock quality issue/);
+    assert.equal(output.cycles[0].synthesis, '');
     assert.equal(
       await fs.readFile(path.join(path.dirname(output.reportPath), 'prompts/cycle-1-mock-maintainability.md'), 'utf8')
         .then((text) => text.includes('You are running a Commands.com code quality audit for area: maintainability.')),
@@ -282,7 +284,8 @@ const SUMMARIZE_CASES = [
   {
     command: REVIEW,
     title: 'summary contract',
-    outputText: yamlBlock({ verdict: 'issues', issue_count: 2 }, 'codex reviewer output found two candidate issues.'),
+    flags: { reviewers: 'correctness,tests' },
+    outputText: yamlBlock({ verdict: 'issues', issue_count: 1 }, 'codex reviewer output found one candidate issue.'),
     synthesisText: yamlBlock({ verdict: 'clean', issue_count: 0 }, 'codex synthesis marked the reviewer candidates non-actionable.'),
     assertions: ({ output, cycle, synthesisText }) => {
       assert.equal(cycle.issueCount, 0);
@@ -304,14 +307,14 @@ const SUMMARIZE_CASES = [
       { score: 'A', verdict: 'clean', issue_count: 0, summary: 'Synthesis marked provider findings non-actionable.' },
       'codex quality synthesis marked the provider candidates non-actionable.',
     ),
-    assertions: ({ output, cycle, synthesisText }) => {
-      assert.equal(output.score, 'A');
-      assert.equal(output.issueCount, 0);
-      assert.equal(output.synopsis, 'Synthesis marked provider findings non-actionable.');
+    assertions: ({ output, cycle }) => {
+      assert.equal(output.score, 'D');
+      assert.equal(output.issueCount, 4);
+      assert.equal(output.synopsis, '4 issues across 1 area. maintainability: D, 4 issues - Provider output found four maintainability issues.');
       assert.equal(cycle.providerIssueCount, 4);
       assert.equal(cycle.outputs[0].score, 'D');
       assert.equal(cycle.outputs[0].issueCount, 4);
-      assert.equal(cycle.synthesis, synthesisText);
+      assert.equal(cycle.synthesis, '');
       assert.equal(cycle.synthesisError, '');
       return /Provider issue count: 4/;
     },
@@ -319,7 +322,7 @@ const SUMMARIZE_CASES = [
 ];
 
 for (const testCase of SUMMARIZE_CASES) {
-  const { command, title, outputText, synthesisText, assertions } = testCase;
+  const { command, title, flags = command.flags, outputText, synthesisText, assertions } = testCase;
   const noun = command === REVIEW ? 'reviewer' : 'provider';
   test(`${command.label} summarize contract records synthesis summary and ${noun} fallback count`, SKIP_WIN, async () => {
     await withTempCwd(async (cwd) => {
@@ -331,7 +334,7 @@ for (const testCase of SUMMARIZE_CASES) {
 
       const result = await captureCommand(
         command.run,
-        parsed(command.positionals(title), { provider: 'codex', ...command.flags, json: 'true' }),
+        parsed(command.positionals(title), { provider: 'codex', ...flags, json: 'true' }),
         cwd,
         env,
       );
@@ -424,7 +427,7 @@ test('runQualityCommand report output remains stable for a single mock area', as
       'Workspace mode: current',
       'Score: B',
       'Issue count: 1',
-      'Synopsis: Mock quality synthesis found one actionable issue.',
+      'Synopsis: 1 issue across 1 area. maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '',
       '',
       '',
@@ -434,17 +437,7 @@ test('runQualityCommand report output remains stable for a single mock area', as
       'Score: B',
       'Issue count: 1',
       'Provider issue count: 1',
-      'Synopsis: Mock quality synthesis found one actionable issue.',
-      '### Synthesis (mock)',
-      '',
-      '```yaml',
-      'score: B',
-      'verdict: issues',
-      'issue_count: 1',
-      'summary: Mock quality synthesis found one actionable issue.',
-      '```',
-      '',
-      'Mock quality synthesis: provider outputs agree there is one actionable quality issue.',
+      'Synopsis: 1 issue across 1 area. maintainability: B, 1 issue - One mock quality issue was found in this area.',
       '### mock / maintainability',
       '',
       '```yaml',
